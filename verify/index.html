@@ -31,6 +31,6 @@ $("go").onclick = async () => {
   const res = r.result || {};
   $("out").hidden = false;
   $("out").textContent = `match ${r.match?.match_id}  ${r.match?.game}/${r.match?.platform}\n` +
-    `final: home ${res.home_score} - away ${res.away_score} (Q${res.quarter}), winner ${res.winner}\n\n` + JSON.stringify(v, null, 2);
+    `final: away ${res.away_score} @ home ${res.home_score} (Q${res.quarter}), winner ${res.winner}\n\n` + JSON.stringify(v, null, 2);
 };
 </script></body></html>

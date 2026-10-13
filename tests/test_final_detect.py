@@ -34,7 +34,7 @@ def test_vendored_agreement_adapter():
     fr = FrameRead(ok=True, reason="ok", profile_id=MADDEN27_STANDARD.profile_id, left_score=21, right_score=14,
                    quarter=4, clock_seconds=0)
     out = agreed_reads_from_frames([(i * 300_000_000, fr, "h") for i in range(6)])
-    assert out and out[-1]["home"] == 21 and out[-1]["away"] == 14
+    assert out and out[-1]["away"] == 21 and out[-1]["home"] == 14  # left = away
 
 
 # ---- end-of-game fallbacks (final_basis) -------------------------------------------------------------

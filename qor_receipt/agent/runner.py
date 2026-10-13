@@ -256,7 +256,7 @@ class AgentCore:
         res = self._agree.offer(fr, clock_ns=f.t_ms * 1_000_000, crop_hash=ch, session_id=self.mid or "m")
         if not (res.agreed and res.read is not None):
             return
-        rd = {"t_ms": f.t_ms, "home": res.read.left_score, "away": res.read.right_score,
+        rd = {"t_ms": f.t_ms, "away": res.read.left_score, "home": res.read.right_score,  # Madden: away team on the LEFT
               "quarter": res.read.quarter, "clock_s": res.read.clock_seconds,
               "clock_red": bool(getattr(res.read, "clock_red", False))}
         self.stats["scorebug_agreed"] += 1
@@ -264,7 +264,7 @@ class AgentCore:
         if akey != self._last_agreed_key:
             self._last_agreed_key = akey
             clk = res.read.clock_text or "--:--"
-            self.prompt.show(f"scorebug agreed: {rd['home']}-{rd['away']} Q{rd['quarter']} {clk} (run {res.run})")
+            self.prompt.show(f"scorebug agreed: {rd['away']}-{rd['home']} (away-home) Q{rd['quarter']} {clk} (run {res.run})")
             self.log({"scorebug_agreed": rd})
         prev = next((r for r in reversed(self.timeline) if "obs" not in r), None)
         key = lambda r: (r["home"], r["away"], r["quarter"], r["clock_s"])  # noqa: E731
@@ -301,7 +301,7 @@ class AgentCore:
             self.final = fin
             self.log({"final": {"home": fin.home, "away": fin.away, "quarter": fin.quarter, "t_ms": fin.t_ms,
                                 "final_basis": fin.basis}})
-            self.prompt.show(f"FINAL detected {fin.home}-{fin.away} (Q{fin.quarter}, basis {fin.basis})")
+            self.prompt.show(f"FINAL detected {fin.away}-{fin.home} (away-home, Q{fin.quarter}, basis {fin.basis})")
             self._issue("end", t_ms)
 
     # ---- challenges
@@ -384,7 +384,7 @@ class AgentCore:
         rec = self._post(f"/matches/{self.mid}/sign", self._signed({"receipt_sha256": body_hash,
                                                                     "sig": self.key.sign(signing_bytes(rec))}))
         self.receipt, self.done = rec, True
-        self.prompt.show(f"receipt finalized: {rec['result']['home_score']}-{rec['result']['away_score']}")
+        self.prompt.show(f"receipt finalized: away {rec['result']['away_score']} @ home {rec['result']['home_score']}")
         return rec
 
 

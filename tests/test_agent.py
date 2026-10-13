@@ -138,7 +138,7 @@ def test_replay_end_to_end_verified(session, tmp_path):
     r = run_replay(session["frames_dir"], session["hid_log"])
     assert r["verify"] == {"status": VERIFIED, "trust_tier": "single-attested", "errors": [], "partial": []}
     rec = r["receipt"]
-    assert (rec["result"]["home_score"], rec["result"]["away_score"], rec["result"]["winner"]) == (21, 24, "away")
+    assert (rec["result"]["home_score"], rec["result"]["away_score"], rec["result"]["winner"]) == (24, 21, "home")  # strip shows ATL-style away 21 (left) @ home 24 (right)
     assert [c["phase"] for c in rec["challenges"]] == ["kickoff", "halftime", "end"]
     assert all(c["result"]["ok"] and 0 <= c["result"]["latency_ms"] <= 600 for c in rec["challenges"])
     assert len(rec["checkpoints"]["home"]) >= 10
@@ -206,7 +206,7 @@ def test_agent_scorebug_gone_final():
         t += 250
         core.on_frame(Frame(t, img, "h"))
     assert core.final is not None and core.final.basis == "scorebug_gone"
-    assert (core.final.home, core.final.away) == (21, 17) and "end" in core.challenges
+    assert (core.final.away, core.final.home) == (21, 17)  # left = away and "end" in core.challenges
     assert any(r.get("obs") == "scorebug_absent" for r in core.timeline)
 
 

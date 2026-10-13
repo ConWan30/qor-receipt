@@ -57,7 +57,8 @@ backwards, gaps ≤ 10 s (including start→first and last→`ended_ms`), and |`
 
 ## 5. Final detection and dual mode
 
-Agents report **agreed** scorebug reads (vendored Qoresence `AgreementWindow`: the same reading on ≥3 frames over
+Madden draws the AWAY team on the left of the scorebug strip and HOME on the right; agents map left → `away`,
+right → `home`. Agents report **agreed** scorebug reads (vendored Qoresence `AgreementWindow`: the same reading on ≥3 frames over
 ≥400 ms, with stricter re-reads for implausible jumps). A game is final when the last reads show quarter ≥4 and
 clock 0:00, with the same non-tied score on ≥3 agreed reads spanning ≥3 s (≥5 if any of those 0:00 reads were
 Madden's red final-seconds clock). Two fallbacks apply only after a stable Q4 score whose last readable clock was
