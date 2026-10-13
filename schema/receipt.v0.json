@@ -42,7 +42,8 @@
       "properties": {
         "home_score": {"type": "integer", "minimum": 0}, "away_score": {"type": "integer", "minimum": 0},
         "quarter": {"type": "integer", "minimum": 4}, "final_t_ms": {"$ref": "#/$defs/ms"},
-        "winner": {"$ref": "#/$defs/role"}, "method": {"const": "agreed_scorebug_final"}
+        "winner": {"$ref": "#/$defs/role"}, "method": {"const": "agreed_scorebug_final"},
+        "final_basis": {"enum": ["clock_zero", "scorebug_gone", "final_screen"]}
       }
     },
     "players": {

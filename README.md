@@ -70,7 +70,8 @@ Madden test, of 233 sampled frames 143 were read correctly, 90 were refused, and
 **Live:** site at <https://conwan30.github.io/qortime/>, verifier at <https://conwan30.github.io/qortime/verify/>.
 
 **Known gaps:**
-- End-of-game final detection (red final-minute clock) still needs hardening.
+- End-of-game: red final-seconds clock is now read (fail-closed), with `scorebug_gone` / `final_screen` fallbacks
+  and `result.final_basis`. Not yet validated on a real Q4 ending (none captured). Reader eval: `eval/`.
 - Halftime challenge and real pause timing are not yet confirmed in a full live match.
 - The referee is in-memory only (no persistence or auth beyond player signatures).
 - Phase 2 items (TPM, transparency log) are not started ([PHASE2](docs/PHASE2.md)). No platform integration.

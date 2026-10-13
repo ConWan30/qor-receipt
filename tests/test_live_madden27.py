@@ -117,3 +117,24 @@ def test_pause_detect_real_menu(name, want):
     d2 = PauseDetector()  # end to end: no gameplay baseline needed, onset at first frame of the run
     d2.update(100, img)
     assert d2.update(133, img) is want and (d2.onsets == [100]) is want
+
+
+# Real red final-seconds clocks (frames from the eval label set, eval/labels/frames-2026-10-13.jsonl).
+RED = {"q2_14-0_red_022": "0:22", "q2_14-0_red_016": "0:16", "q2_14-0_red_014": "0:14", "q2_13-0_red_027": "0:27"}
+
+
+@pytest.mark.parametrize("name", sorted(RED))
+def test_red_clock_read_or_refused_never_wrong(reader, name):
+    x = reader.read(_frame(name))
+    assert x.ok and x.clock_red
+    assert x.clock_text in (None, RED[name])  # fail closed: either the right digits or nothing
+
+
+def test_red_clock_reads_some_real_frames(reader):
+    got = [reader.read(_frame(n)).clock_text for n in sorted(RED)]
+    assert sum(g is not None for g in got) >= 3, got
+
+
+def test_red_clock_off_switch():
+    x = ScorebugReader(read_red_clock=False).read(_frame("q2_14-0_red_022"))
+    assert x.ok and x.clock_red and x.clock_text is None and x.detail["clock"] == "clock_red"

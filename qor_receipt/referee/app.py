@@ -26,7 +26,7 @@ from qor_receipt.challenge import (
     verify_response,
 )
 from qor_receipt.checkpoints import body_of, countersign
-from qor_receipt.final_detect import detect_final, timelines_agree
+from qor_receipt.final_detect import detect_final, timelines_agree, weakest_basis
 from qor_receipt.jcs import canonicalize, sha256_hex
 from qor_receipt.keys import SoftwareKey, verify
 
@@ -163,7 +163,8 @@ def create_app(key: SoftwareKey | None = None, clock: Callable[[], int] | None =
             match={"match_id": mid, "game": m["game"], "platform": m["platform"], "scorebug_profile": "madden27_standard",
                    "mode": mode, "started_ms": m["started_ms"], "ended_ms": now()},
             result={"home_score": f.home, "away_score": f.away, "quarter": f.quarter, "final_t_ms": f.t_ms,
-                    "winner": "home" if f.home > f.away else "away", "method": "agreed_scorebug_final"},
+                    "winner": "home" if f.home > f.away else "away", "method": "agreed_scorebug_final",
+                    "final_basis": weakest_basis(x.basis for x in finals.values())},
             players=[m["players"][r] for r in roles],
             referee={"pubkey": key.pubkey_hex, "key_id": key.key_id, "key_kind": key.kind},
             challenges=sorted(m["challenges"].values(), key=lambda c: (c["issued_ms"], c["id"])),

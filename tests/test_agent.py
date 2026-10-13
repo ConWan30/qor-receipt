@@ -173,3 +173,49 @@ def test_cli_replay_and_verify(session, tmp_path, capsys):
 def test_committed_replay_vector_verifies():
     v = json.loads((STRIPS.parents[3] / "tests" / "vectors" / "agent_replay_receipt.json").read_text())
     assert verify_receipt(v["receipt"], referee_pub=v["referee_pub"])["status"] == VERIFIED
+
+
+def test_agent_scorebug_gone_final():
+    """Q4 low clock, then the strip vanishes for >30 s (no pause) -> FINAL with basis scorebug_gone."""
+    from qor_receipt._vendor.qoresence.vision.local_scorebug.profile import MADDEN27_STANDARD
+    from qor_receipt._vendor.qoresence.vision.local_scorebug.reader import FrameRead
+    from qor_receipt.agent.capture import Frame
+    from qor_receipt.agent.runner import AgentConfig, AgentCore, Prompt
+
+    class FakeReader:
+        def __init__(self):
+            self.script = []
+
+        def read(self, img):
+            return self.script.pop(0)
+
+        def reference_band(self, img):
+            return np.zeros((30, 640, 3), np.uint8), "ok"
+
+    ok = FrameRead(ok=True, reason="ok", profile_id=MADDEN27_STANDARD.profile_id, left_score=21, right_score=17, quarter=4,
+                   clock_seconds=3, clock_text="0:03", clock_red=True)
+    gone = FrameRead(ok=False, reason="layout_unknown", profile_id=MADDEN27_STANDARD.profile_id)
+    fr = FakeReader()
+    core = AgentCore(None, None, AgentConfig(), Prompt(quiet=True), scorebug=fr)
+    core.mid, core.start_ms = "m", 0
+    core._issue = lambda phase, t: core.challenges.setdefault(phase, {"t": t})
+    img = np.random.default_rng(0).integers(60, 200, (360, 640, 3), dtype=np.uint8)
+    t = 0
+    fr.script = [ok] * 20 + [gone] * 200
+    for _ in range(20 + 140):  # 140 * 250 ms = 35 s of no strip
+        t += 250
+        core.on_frame(Frame(t, img, "h"))
+    assert core.final is not None and core.final.basis == "scorebug_gone"
+    assert (core.final.home, core.final.away) == (21, 17) and "end" in core.challenges
+    assert any(r.get("obs") == "scorebug_absent" for r in core.timeline)
+
+
+def test_agent_short_absence_not_final():
+    """Same, but the strip is only gone 20 s (replay length): fail closed."""
+    import qor_receipt.agent.runner as rn
+
+    core = rn.AgentCore(None, None, rn.AgentConfig(), rn.Prompt(quiet=True))
+    core.timeline = [{"t_ms": i * 1000, "home": 21, "away": 17, "quarter": 4, "clock_s": 3} for i in range(4)]
+    core.timeline.append({"t_ms": 4_000, "until_ms": 24_000, "obs": "scorebug_absent", "n": 100})
+    core._check_final(24_000)
+    assert core.final is None

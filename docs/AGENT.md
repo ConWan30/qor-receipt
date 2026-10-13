@@ -23,6 +23,12 @@ Each live run writes `qor-session-*/hid.jsonl` (button/stick events, challenge n
 Replay runs the same core against an in-process referee on a virtual clock, re-using the recorded
 nonces (proves the pipeline, not freshness). `qortime agent-fixture DIR` writes a synthetic session.
 
-Known live unknowns: pause-menu thresholds/template; real end-of-game scorebug (Madden may turn the
-final clock red -> reader `clock_red`, or cut away before 3 agreed 0:00 reads); pattern buttons are
+End of game: the reader now reads the red final-seconds clock (luma, contrast-stretched: 4:2:0 chroma blurs the
+red channel) under the same glyph gates and flags `clock_red`; a red 0:00 needs 5 agreed reads. If the clock
+never reads 0:00 the agent falls back to `scorebug_gone` (strip absent ≥30 s after a Q4 ≤0:05 read) or
+`final_screen` (hook `AgentCore.final_screen_detector`; no detector ships yet, no real final-screen frames).
+The FINAL log line / session-log `final` record carry `final_basis`.
+
+Known live unknowns: pause-menu thresholds/template; a real Q4 end-of-game capture (no 0:00 red frame or final
+screen exists yet; eval set: `eval/labels/`); pattern buttons are
 pressed inside the pause menu (CROSS/CIRCLE may select/resume — check what the menu does).

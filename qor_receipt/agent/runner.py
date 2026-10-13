@@ -28,6 +28,9 @@ from qor_receipt.receipt import signing_bytes
 from .capture import Frame
 from .pause_detect import PauseDetector, PauseThresholds
 
+# reader refusals that mean "no scorebug strip on screen" (vs. a strip that is there but unreadable)
+NOT_VISIBLE = frozenset({"layout_unknown"})
+
 
 # ---------------------------------------------------------------- clocks
 class AgentClock:
@@ -138,6 +141,9 @@ class AgentCore:
         self.sb_reasons: dict[str, int] = {}
         self._last_health_ms: int | None = None
         self._last_agreed_key: tuple | None = None
+        self._absent: dict | None = None   # open "scorebug_absent" obs span (lives inside self.timeline)
+        self._screen: dict | None = None   # open "final_screen" obs span
+        self.final_screen_detector: Callable[[Any], bool] | None = None  # none shipped yet (no real frames)
         self.stats = {"frames": 0, "size_resets": 0, "hid_events": 0, "checkpoints": 0, "scorebug_reads": 0, "scorebug_ok": 0,
                       "scorebug_agreed": 0, "scorebug_errors": 0, "scorebug_skipped_paused": 0}
 
@@ -198,6 +204,7 @@ class AgentCore:
             self._last_sb_ms = f.t_ms
             if self.pause.paused:
                 self.stats["scorebug_skipped_paused"] += 1
+                self._absent = self._screen = None   # a pause menu breaks any absence / final-screen span
             else:
                 self._read_scorebug(f)
         self._health(f.t_ms)
@@ -245,11 +252,13 @@ class AgentCore:
             self.stats["scorebug_ok"] += 1
         else:
             self.sb_reasons[fr.reason] = self.sb_reasons.get(fr.reason, 0) + 1
+        self._observe(f, absent=(not fr.ok and fr.reason in NOT_VISIBLE))
         res = self._agree.offer(fr, clock_ns=f.t_ms * 1_000_000, crop_hash=ch, session_id=self.mid or "m")
         if not (res.agreed and res.read is not None):
             return
         rd = {"t_ms": f.t_ms, "home": res.read.left_score, "away": res.read.right_score,
-              "quarter": res.read.quarter, "clock_s": res.read.clock_seconds}
+              "quarter": res.read.quarter, "clock_s": res.read.clock_seconds,
+              "clock_red": bool(getattr(res.read, "clock_red", False))}
         self.stats["scorebug_agreed"] += 1
         akey = (rd["home"], rd["away"], rd["quarter"])
         if akey != self._last_agreed_key:
@@ -257,19 +266,43 @@ class AgentCore:
             clk = res.read.clock_text or "--:--"
             self.prompt.show(f"scorebug agreed: {rd['home']}-{rd['away']} Q{rd['quarter']} {clk} (run {res.run})")
             self.log({"scorebug_agreed": rd})
-        prev = self.timeline[-1] if self.timeline else None
+        prev = next((r for r in reversed(self.timeline) if "obs" not in r), None)
         key = lambda r: (r["home"], r["away"], r["quarter"], r["clock_s"])  # noqa: E731
         if prev is None or key(prev) != key(rd) or rd["t_ms"] - prev["t_ms"] >= 1_000:
             self.timeline.append(rd)
         self.reads.append(rd)
+        self._absent = self._screen = None  # a fresh score read ends any absence span
         if rd["quarter"] >= 3 and "halftime" not in self.challenges:
             self._issue("halftime", f.t_ms)
-        if self.final is None:
-            fin = detect_final(self.timeline)
-            if fin.final:
-                self.final = fin
-                self.prompt.show(f"FINAL detected {fin.home}-{fin.away} (Q{fin.quarter})")
-                self._issue("end", f.t_ms)
+        self._check_final(f.t_ms)
+
+    def _observe(self, f: Frame, *, absent: bool) -> None:
+        """Track continuous scorebug-absent / final-screen spans as timeline obs entries."""
+        def span(cur, name, on):
+            if not on:
+                return None
+            if cur is None:
+                cur = {"t_ms": f.t_ms, "until_ms": f.t_ms, "obs": name, "n": 0}
+                self.timeline.append(cur)
+            cur["until_ms"], cur["n"] = f.t_ms, cur["n"] + 1
+            return cur
+
+        self._absent = span(self._absent, "scorebug_absent", absent)
+        screen = bool(absent and self.final_screen_detector and self.final_screen_detector(f.image))
+        self._screen = span(self._screen, "final_screen", screen)
+        if absent:
+            self._check_final(f.t_ms)
+
+    def _check_final(self, t_ms: int) -> None:
+        if self.final is not None:
+            return
+        fin = detect_final(self.timeline)
+        if fin.final:
+            self.final = fin
+            self.log({"final": {"home": fin.home, "away": fin.away, "quarter": fin.quarter, "t_ms": fin.t_ms,
+                                "final_basis": fin.basis}})
+            self.prompt.show(f"FINAL detected {fin.home}-{fin.away} (Q{fin.quarter}, basis {fin.basis})")
+            self._issue("end", t_ms)
 
     # ---- challenges
     def _issue(self, phase: str, t_ms: int) -> None:

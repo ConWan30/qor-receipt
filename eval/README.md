@@ -20,3 +20,12 @@ Stats: 236 frames; strip visible 162 / absent 71 / unsure 3; score legible 146; 
 (Q2 0:27 to 0:09); final screens 0; quarters Q1 93, Q2 68, Q3 1.
 
 Run: `python eval/score_reader.py --root /workspace [--show-wrong] [--json]`
+
+## Results (frames with a labelled value; "abstain_ok" rows excluded)
+
+| field | before (PR #6) | after red-clock reading |
+|---|---|---|
+| score (146) | 144 correct / 2 refused / 0 wrong | same |
+| quarter (162) | 144 / 18 / 0 | same |
+| clock (162) | 26 / 136 / 0 | 31 / 131 / 0 |
+| clock_red (162) | 40 / 122 / 0 (red only inferred from refusal) | 144 / 18 / 0 |

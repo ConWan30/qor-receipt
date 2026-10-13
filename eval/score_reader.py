@@ -27,7 +27,7 @@ def predict(reader, img) -> dict:
     fr = reader.read(img)
     ok = bool(fr.ok)
     creason = (fr.detail or {}).get("clock") if ok else None
-    red = getattr(fr, "clock_red", None)
+    red = getattr(fr, "clock_red", None) if ok else None
     if red is None and ok:
         red = True if creason == "clock_red" else (False if fr.clock_text else None)
     return {
