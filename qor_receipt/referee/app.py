@@ -50,7 +50,9 @@ class Signed(BaseModel):
     sig: str
 
 
-def create_app(key: SoftwareKey | None = None, clock: Callable[[], int] | None = None) -> FastAPI:
+def create_app(key: SoftwareKey | None = None, clock: Callable[[], int] | None = None,
+               nonce_fn: Callable[[str, str], str] | None = None) -> FastAPI:
+    """nonce_fn(phase, role) is ONLY for agent replay of a recorded session; production uses fresh random nonces."""
     key = key or (SoftwareKey.from_seed_hex(os.environ["QOR_REFEREE_SEED"]) if os.getenv("QOR_REFEREE_SEED") else SoftwareKey())
     now = clock or (lambda: int(time.time() * 1000))
     app = FastAPI(title="qor-receipt referee", version="0.1.0")
@@ -89,7 +91,7 @@ def create_app(key: SoftwareKey | None = None, clock: Callable[[], int] | None =
         phase, role = body.get("phase"), body.get("role")
         if phase not in PHASES or role not in m["players"]:
             raise HTTPException(400, "bad phase/role")
-        nonce, t = new_nonce(), now()
+        nonce, t = (nonce_fn(phase, role) if nonce_fn else new_nonce()), now()
         cid = secrets.token_hex(6)
         c = {"id": cid, "role": role, "phase": phase, "nonce": nonce, "pattern": pattern_for(nonce),
              "issued_ms": t, "deadline_ms": t + DEFAULT_DEADLINE_MS, "result": None}
