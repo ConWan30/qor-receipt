@@ -21,3 +21,6 @@ Vision modules need the `[vision]` extra (numpy, opencv-python-headless).
 - 2026-10-13 `local_scorebug/reader.py`: game clock is best-effort (a blank/red clock no longer
   blanks the whole read; score + quarter gates unchanged). Live Madden 27 capture got a sure clock on
   ~10% of frames, so the agreement window never reached 3-in-a-row. Upstream this to Qoresence.
+- 2026-10-13 `local_scorebug/reader.py`: red final-seconds clock is read (`read_red_clock=True` default) from
+  contrast-stretched luma instead of HSV value, same clock glyph gates; `FrameRead.clock_red` flag added.
+  On the 16 labelled red frames: 5 read correctly, 11 refused, 0 wrong. Upstream this to Qoresence.

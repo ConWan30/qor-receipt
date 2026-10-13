@@ -18,7 +18,7 @@ Status: draft v0. Schema: [`schema/receipt.v0.json`](../schema/receipt.v0.json).
 * `match`: `match_id` (issued by the referee), `game` (`madden27`), `platform` (`ps5`),
   `scorebug_profile` (`madden27_standard`, the vendored Qoresence profile), `mode` (`dual` or `single`),
   `started_ms` and `ended_ms` (referee clock, Unix ms).
-* `result`: `home_score`, `away_score`, `quarter` (≥4; 5 = OT), `final_t_ms`, `winner`, `method` = `agreed_scorebug_final`.
+* `result`: `home_score`, `away_score`, `quarter` (≥4; 5 = OT), `final_t_ms`, `winner`, `method` = `agreed_scorebug_final`, optional `final_basis` (§5).
 * `players[]`: `role` (`home` or `away`), `player_id` (e.g. `psn:<id>`), `pubkey`, `key_kind`
   (`software`, `software-file` or `tpm`).
 * `referee`: `pubkey`, `key_id`, `key_kind`.
@@ -59,7 +59,13 @@ backwards, gaps ≤ 10 s (including start→first and last→`ended_ms`), and |`
 
 Agents report **agreed** scorebug reads (vendored Qoresence `AgreementWindow`: the same reading on ≥3 frames over
 ≥400 ms, with stricter re-reads for implausible jumps). A game is final when the last reads show quarter ≥4 and
-clock 0:00, with the same non-tied score on ≥3 agreed reads spanning ≥3 s. In dual mode the referee finalizes only if
+clock 0:00, with the same non-tied score on ≥3 agreed reads spanning ≥3 s (≥5 if any of those 0:00 reads were
+Madden's red final-seconds clock). Two fallbacks apply only after a stable Q4 score whose last readable clock was
+≤0:05: the scorebug strip continuously absent (no pause menu) for ≥30 s starting ≤15 s after the last read, or a
+final-score screen on ≥3 frames over ≥3 s. Agents send these as `{"obs": "scorebug_absent"|"final_screen", "t_ms",
+"until_ms", "n"}` spans inside the timeline; any later score read cancels them. `result.final_basis` (optional,
+`clock_zero` | `scorebug_gone` | `final_screen`) records which rule fired; in dual mode it is the weaker of the two
+agents' bases (clock_zero > final_screen > scorebug_gone). Ambiguous evidence means no final. In dual mode the referee finalizes only if
 both finals are equal and both timelines have the same ordered (home, away, quarter) state changes within 5 s of
 each other. Otherwise there's no receipt (HTTP 409, dispute).
 

@@ -58,6 +58,7 @@ class FrameRead:
     clock_conf: float | None = None
     clock_margin: float | None = None
     quarter_conf: float | None = None
+    clock_red: bool = False
     offset: tuple[int, int] = (0, 0)
     detail: dict[str, Any] = field(default_factory=dict)
 
@@ -147,9 +148,11 @@ class ScorebugReader:
     """Stateless per-frame reader for one profile + template pack."""
 
     def __init__(
-        self, profile: ScorebugProfile = MADDEN27_STANDARD, pack: TemplatePack | None = None
+        self, profile: ScorebugProfile = MADDEN27_STANDARD, pack: TemplatePack | None = None,
+        read_red_clock: bool = True,
     ) -> None:
         self.profile = profile
+        self.read_red_clock = read_red_clock
         self.pack = pack if pack is not None else TemplatePack.load(profile.pack_path)
 
     @property
@@ -308,6 +311,23 @@ class ScorebugReader:
             return False
         return float(hsv[..., 1][ink].mean()) > 90.0
 
+    @staticmethod
+    def clock_intensity(patch_bgr: np.ndarray, red: bool) -> np.ndarray:
+        """Per-pixel ink intensity for the clock digits.
+
+        White digits: HSV value. Red digits (final ~30 s of a half): HDMI/JPEG
+        4:2:0 chroma subsampling blurs the red channel, but luma keeps full
+        resolution, so use luma and stretch it so the ink peak maps to 255 like
+        white ink does (colour normalisation).
+        """
+        if not red:
+            return cv2.cvtColor(patch_bgr, cv2.COLOR_BGR2HSV)[..., 2].astype(np.float32)
+        y = cv2.cvtColor(patch_bgr, cv2.COLOR_BGR2GRAY).astype(np.float32)
+        lo, hi = float(np.percentile(y, 5)), float(np.percentile(y, 99))
+        if hi - lo < 1.0:
+            return np.zeros_like(y)
+        return np.clip((y - lo) * (255.0 / (hi - lo)), 0, 255)
+
     def clock_glyphs(
         self, band: np.ndarray, dx: int, dy: int
     ) -> tuple[list[np.ndarray] | None, str]:
@@ -320,11 +340,10 @@ class ScorebugReader:
         patch = self._crop(band, _shift(p.clock_text, dx, dy))
         if patch is None:
             return None, "clock_roi"
-        if self.clock_is_red(patch):
-            # Red final-seconds clock is blurry at 360p; red 1-vs-9 confusions
-            # were seen in testing, so phase 1 never reads it.
+        red = self.clock_is_red(patch)
+        if red and not self.read_red_clock:
             return None, "clock_red"
-        v = cv2.cvtColor(patch, cv2.COLOR_BGR2HSV)[..., 2].astype(np.float32)
+        v = self.clock_intensity(patch, red)
         peak = float(np.percentile(v, 98))
         if peak < p.clock_min_peak:
             return None, "clock_missing"
@@ -448,6 +467,8 @@ class ScorebugReader:
             return FrameRead(ok=False, reason=qwhy, profile_id=pid, offset=(dx, dy), detail=info)
         secs, text, cwhy, cc, cm = self._read_clock(band, dx, dy)
         info["clock"] = cwhy
+        cpatch = self._crop(band, _shift(p.clock_text, dx, dy))
+        red = bool(cpatch is not None and self.clock_is_red(cpatch))
         return FrameRead(
             ok=True,
             reason="ok",
@@ -462,6 +483,7 @@ class ScorebugReader:
             clock_conf=round(cc, 4) if secs is not None else None,
             clock_margin=round(cm, 4) if secs is not None else None,
             quarter_conf=round(qc, 4),
+            clock_red=red,
             offset=(dx, dy),
             detail=info,
         )
