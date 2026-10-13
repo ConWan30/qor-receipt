@@ -55,7 +55,7 @@ def create_app(key: SoftwareKey | None = None, clock: Callable[[], int] | None =
     """nonce_fn(phase, role) is ONLY for agent replay of a recorded session; production uses fresh random nonces."""
     key = key or (SoftwareKey.from_seed_hex(os.environ["QOR_REFEREE_SEED"]) if os.getenv("QOR_REFEREE_SEED") else SoftwareKey())
     now = clock or (lambda: int(time.time() * 1000))
-    app = FastAPI(title="qor-receipt referee", version="0.1.0")
+    app = FastAPI(title="QorTime referee", version="0.1.0")
     M: dict[str, dict[str, Any]] = {}
 
     def get(mid: str) -> dict[str, Any]:

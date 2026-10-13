@@ -13,15 +13,15 @@ Feeds real data to the referee from a Windows PC: PS5 -> HDMI -> "USB3.0 Video" 
 Live (on the Windows laptop):
 
     scripts\qor-agent.cmd http://REFEREE:8000 --window
-    # = qor-receipt agent --device "USB3.0 Video" --referee http://REFEREE:8000 --window
+    # = qortime agent --device "USB3.0 Video" --referee http://REFEREE:8000 --window
 
 Each live run writes `qor-session-*/hid.jsonl` (button/stick events, challenge nonces) and
 `qor-session-*/frames/<t_ms>.jpg` (all frames around challenges, ~5/s otherwise) so the match can be replayed:
 
-    qor-receipt agent --replay qor-session-X/frames --hid-log qor-session-X/hid.jsonl
+    qortime agent --replay qor-session-X/frames --hid-log qor-session-X/hid.jsonl
 
 Replay runs the same core against an in-process referee on a virtual clock, re-using the recorded
-nonces (proves the pipeline, not freshness). `qor-receipt agent-fixture DIR` writes a synthetic session.
+nonces (proves the pipeline, not freshness). `qortime agent-fixture DIR` writes a synthetic session.
 
 Known live unknowns: pause-menu thresholds/template; real end-of-game scorebug (Madden may turn the
 final clock red -> reader `clock_red`, or cut away before 3 agreed 0:00 reads); pattern buttons are

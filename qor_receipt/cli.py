@@ -1,4 +1,4 @@
-"""qor-receipt CLI.
+"""QorTime CLI (commands: `qortime` or `qor-receipt`).
 
   qor-receipt verify RECEIPT.json [--referee-pub HEX]     exit 0 VERIFIED, 1 PARTIAL, 2 FAIL
   qor-receipt emit --demo OUT.json [--mode dual|single]   build a fully synthetic signed receipt
@@ -18,7 +18,7 @@ from qor_receipt.receipt import FAIL, PARTIAL, verify_receipt
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(prog="qor-receipt")
+    ap = argparse.ArgumentParser(prog="qortime", description="QorTime: signed, verifiable console match results")
     sub = ap.add_subparsers(dest="cmd", required=True)
     v = sub.add_parser("verify")
     v.add_argument("receipt")

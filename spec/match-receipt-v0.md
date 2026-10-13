@@ -1,4 +1,4 @@
-# qor-receipt v0: match receipt specification
+# QorTime receipt v0 (`qor-receipt/v0`): match receipt specification
 
 Status: draft v0. Schema: [`schema/receipt.v0.json`](../schema/receipt.v0.json). Reference implementations:
 `qor_receipt/receipt.py` (Python) and `verify/verify.js` (browser). Both must give identical verdicts.
