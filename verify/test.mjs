@@ -16,4 +16,7 @@ const t2 = structuredClone(d.receipt); t2.checkpoints.home.splice(3, 1);
 ok((await verifyReceipt(t2, d.referee_pub)).status === "FAIL", "dropped checkpoint => FAIL");
 const t3 = structuredClone(d.receipt); t3.trust_tier = "dual-attested"; t3.match.mode = "single";
 ok((await verifyReceipt(t3, d.referee_pub)).status === "FAIL", "tier upgrade => FAIL");
+const a = JSON.parse(readFileSync(new URL("../tests/vectors/agent_replay_receipt.json", import.meta.url)));
+r = await verifyReceipt(a.receipt, a.referee_pub);
+ok(r.status === "VERIFIED" && r.trust_tier === "single-attested", "agent replay receipt VERIFIED in JS");
 process.exit(fails ? 1 : 0);

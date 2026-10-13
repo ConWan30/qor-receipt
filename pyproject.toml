@@ -13,6 +13,7 @@ dependencies = ["cryptography>=42"]
 [project.optional-dependencies]
 referee = ["fastapi>=0.110", "uvicorn>=0.29", "httpx>=0.27"]
 vision = ["numpy>=1.26", "opencv-python-headless>=4.9"]
+agent = ["numpy>=1.26", "opencv-python>=4.9", "hidapi>=0.14", "httpx>=0.27", "fastapi>=0.110", "pygrabber>=0.2; sys_platform == 'win32'"]
 dev = ["pytest>=8", "jsonschema>=4", "fastapi>=0.110", "httpx>=0.27", "ruff>=0.5"]
 
 [project.scripts]
@@ -22,7 +23,7 @@ qor-receipt = "qor_receipt.cli:main"
 include = ["qor_receipt*"]
 
 [tool.setuptools.package-data]
-"*" = ["*.npz", "*.md"]
+"*" = ["*.npz", "*.md", "*.jpg", "*.png"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
