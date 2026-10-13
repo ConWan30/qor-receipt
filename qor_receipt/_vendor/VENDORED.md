@@ -16,3 +16,8 @@ l9_presence/port_cert.py (VERIFIED/PARTIAL/FAIL honesty: missing evidence => PAR
 compose/clock-notary io_ledger (rolling, countersigned ledger). QorTroller is NOT a dependency.
 
 Vision modules need the `[vision]` extra (numpy, opencv-python-headless).
+
+## Local changes
+- 2026-10-13 `local_scorebug/reader.py`: game clock is best-effort (a blank/red clock no longer
+  blanks the whole read; score + quarter gates unchanged). Live Madden 27 capture got a sure clock on
+  ~10% of frames, so the agreement window never reached 3-in-a-row. Upstream this to Qoresence.

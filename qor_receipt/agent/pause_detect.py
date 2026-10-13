@@ -10,7 +10,11 @@ Signals (all thresholds pluggable via ``PauseThresholds`` / ``--pause-config JSO
   (x0, y0, x1, y1 as 0..1 fractions) is at least ``panel_min_frac``;
 - optional ``template``: normalized cross-correlation vs a captured pause-menu thumbnail
   >= ``template_min`` (overrides the heuristic when it fires).
-Paused = template match OR (dim AND panel), held for ``confirm_frames`` consecutive frames;
+- ``dark_menu``: the real Madden 27 pause menu (tuned on a 640x360 capture, Oct 2026) is NOT a
+  bright panel: the whole screen goes near-black (thumb mean ~10, lower half ~3) with small white
+  text (menu list, top-centre scoreboard "14 - 0 / 3rd 5:00"). Matched by absolute luma caps plus a
+  bright-text fraction window, so it needs no gameplay baseline and ignores pure-black fades.
+Paused = template match OR dark_menu OR (dim AND panel), held for ``confirm_frames`` consecutive frames;
 the onset time is the FIRST frame of that run, so confirmation adds no latency to pause_seen_ms.
 """
 from __future__ import annotations
@@ -35,6 +39,11 @@ class PauseThresholds:
     min_baseline: float = 20.0
     template_path: str | None = None
     template_min: float = 0.80
+    dark_menu: bool = True
+    dark_menu_max_luma: float = 16.0
+    dark_menu_max_lower: float = 8.0
+    dark_menu_bright_min: float = 0.005
+    dark_menu_bright_max: float = 0.05
     extra: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
@@ -84,6 +93,9 @@ class PauseDetector:
         outside = np.ones(g.shape, bool)
         outside[ys, xs] = False
         f = {"luma": float(g[outside].mean()) if outside.any() else float(g.mean()), "panel_frac": float((roi >= self.th.panel_luma).mean()) if roi.size else 0.0}
+        f["bright_frac"] = float((g >= self.th.panel_luma).mean())
+        f["full_luma"] = float(g.mean())
+        f["lower_luma"] = float(g[THUMB[1] // 2:].mean())
         if self._tpl is not None:
             a = g.astype("float32") - g.mean()
             b = self._tpl - self._tpl.mean()
@@ -94,6 +106,10 @@ class PauseDetector:
     def classify(self, f: dict[str, float]) -> bool:
         th = self.th
         if "template" in f and f["template"] >= th.template_min:
+            return True
+        if th.dark_menu and "full_luma" in f and f["full_luma"] <= th.dark_menu_max_luma \
+                and f["lower_luma"] <= th.dark_menu_max_lower \
+                and th.dark_menu_bright_min <= f["bright_frac"] <= th.dark_menu_bright_max:
             return True
         base = self.baseline
         dim = base is not None and base >= th.min_baseline and f["luma"] <= th.dim_ratio * base

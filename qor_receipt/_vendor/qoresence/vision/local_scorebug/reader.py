@@ -436,15 +436,18 @@ class ScorebugReader:
         if left is None or right is None:
             reason = lwhy if left is None else rwhy
             return FrameRead(ok=False, reason=reason, profile_id=pid, offset=(dx, dy), detail=info)
-        secs, text, cwhy, cc, cm = self._read_clock(band, dx, dy)
-        if secs is None:
-            info["partial_pair"] = [left, right]
-            return FrameRead(ok=False, reason=cwhy, profile_id=pid, offset=(dx, dy), detail=info)
+        # Quarter is required (it drives the halftime / final logic); the game
+        # clock is best-effort. Live Madden 27 captures blank the clock on most
+        # frames (motion blur, red final-minute digits, the play-clock flash),
+        # and requiring it starved the agreement window: one sure clock read in
+        # ~10 frames never gave three in a row. A blank clock now yields a read
+        # with clock_seconds=None; the score/quarter gates are unchanged.
         q, qwhy, qc = self._read_quarter(band, dx, dy)
         if q is None:
             info["partial_pair"] = [left, right]
-            info["partial_clock"] = text
             return FrameRead(ok=False, reason=qwhy, profile_id=pid, offset=(dx, dy), detail=info)
+        secs, text, cwhy, cc, cm = self._read_clock(band, dx, dy)
+        info["clock"] = cwhy
         return FrameRead(
             ok=True,
             reason="ok",
@@ -456,8 +459,8 @@ class ScorebugReader:
             clock_text=text,
             score_conf=round(min(lc, rc), 4),
             score_margin=round(min(lm, rm), 4),
-            clock_conf=round(cc, 4),
-            clock_margin=round(cm, 4),
+            clock_conf=round(cc, 4) if secs is not None else None,
+            clock_margin=round(cm, 4) if secs is not None else None,
             quarter_conf=round(qc, 4),
             offset=(dx, dy),
             detail=info,

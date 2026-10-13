@@ -104,6 +104,7 @@ class AgentConfig:
     challenge_settle_ms: int = 800       # wait after the last button so the pause onset is captured
     bin_ms: int = 1_000
     pause: PauseThresholds | None = None
+    health_interval_ms: int = 30_000     # periodic scorebug read-health line on the prompt
 
 
 class AgentCore:
@@ -134,7 +135,11 @@ class AgentCore:
         self._prev_thumb = None
         self.motion_bins: dict[int, list[float]] = {}
         self.energy_bins: dict[int, list[float]] = {}
-        self.stats = {"frames": 0, "size_resets": 0, "hid_events": 0, "checkpoints": 0, "scorebug_reads": 0, "scorebug_ok": 0}
+        self.sb_reasons: dict[str, int] = {}
+        self._last_health_ms: int | None = None
+        self._last_agreed_key: tuple | None = None
+        self.stats = {"frames": 0, "size_resets": 0, "hid_events": 0, "checkpoints": 0, "scorebug_reads": 0, "scorebug_ok": 0,
+                      "scorebug_agreed": 0, "scorebug_errors": 0, "scorebug_skipped_paused": 0}
 
     # ---- referee plumbing
     def _post(self, path: str, body: dict) -> dict:
@@ -189,9 +194,31 @@ class AgentCore:
             b = (f.t_ms - self.start_ms) // self.cfg.bin_ms
             self.motion_bins.setdefault(b, []).append(float(np.abs(thumb - self._prev_thumb).mean()))
         self._prev_thumb = thumb
-        if f.t_ms - self._last_sb_ms >= self.cfg.scorebug_interval_ms and not self.pause.paused:
+        if f.t_ms - self._last_sb_ms >= self.cfg.scorebug_interval_ms:
             self._last_sb_ms = f.t_ms
-            self._read_scorebug(f)
+            if self.pause.paused:
+                self.stats["scorebug_skipped_paused"] += 1
+            else:
+                self._read_scorebug(f)
+        self._health(f.t_ms)
+
+    def health_line(self) -> str:
+        st = self.stats
+        top = sorted(self.sb_reasons.items(), key=lambda kv: -kv[1])[:4]
+        refused = ", ".join(f"{k}={v}" for k, v in top) or "none"
+        return (f"scorebug health: reads={st['scorebug_reads']} accepted={st['scorebug_ok']} "
+                f"agreed={st['scorebug_agreed']} errors={st['scorebug_errors']} "
+                f"skipped_paused={st['scorebug_skipped_paused']} refused[{refused}] "
+                f"last_agreed={self._last_agreed_key}")
+
+    def _health(self, t_ms: int) -> None:
+        if self._last_health_ms is None:
+            self._last_health_ms = t_ms
+        elif t_ms - self._last_health_ms >= self.cfg.health_interval_ms:
+            self._last_health_ms = t_ms
+            self.prompt.show(self.health_line())
+            self.log({"scorebug_health": {"t_ms": t_ms, **{k: v for k, v in self.stats.items() if k.startswith("scorebug")},
+                                          "refused": dict(self.sb_reasons)}})
 
     def _read_scorebug(self, f: Frame) -> None:
         if self._scorebug is None:
@@ -203,17 +230,33 @@ class AgentCore:
             from qor_receipt._vendor.qoresence.vision.local_scorebug.agreement import AgreementWindow
 
             self._agree = AgreementWindow()
-        fr = self._scorebug.read(f.image)
         self.stats["scorebug_reads"] += 1
-        band, _ = self._scorebug.reference_band(f.image)
+        try:
+            fr = self._scorebug.read(f.image)
+            band, _ = self._scorebug.reference_band(f.image)
+        except Exception as e:  # never silent: count it, say it (first few), keep capturing
+            self.stats["scorebug_errors"] += 1
+            self.sb_reasons["exception"] = self.sb_reasons.get("exception", 0) + 1
+            if self.stats["scorebug_errors"] <= 3:
+                self.prompt.show(f"scorebug reader error: {type(e).__name__}: {e}")
+            return
         ch = hashlib.sha256(band.tobytes()).hexdigest()[:16] if band is not None else ""
         if fr.ok:
             self.stats["scorebug_ok"] += 1
+        else:
+            self.sb_reasons[fr.reason] = self.sb_reasons.get(fr.reason, 0) + 1
         res = self._agree.offer(fr, clock_ns=f.t_ms * 1_000_000, crop_hash=ch, session_id=self.mid or "m")
         if not (res.agreed and res.read is not None):
             return
         rd = {"t_ms": f.t_ms, "home": res.read.left_score, "away": res.read.right_score,
               "quarter": res.read.quarter, "clock_s": res.read.clock_seconds}
+        self.stats["scorebug_agreed"] += 1
+        akey = (rd["home"], rd["away"], rd["quarter"])
+        if akey != self._last_agreed_key:
+            self._last_agreed_key = akey
+            clk = res.read.clock_text or "--:--"
+            self.prompt.show(f"scorebug agreed: {rd['home']}-{rd['away']} Q{rd['quarter']} {clk} (run {res.run})")
+            self.log({"scorebug_agreed": rd})
         prev = self.timeline[-1] if self.timeline else None
         key = lambda r: (r["home"], r["away"], r["quarter"], r["clock_s"])  # noqa: E731
         if prev is None or key(prev) != key(rd) or rd["t_ms"] - prev["t_ms"] >= 1_000:
