@@ -155,7 +155,7 @@ def agreed_reads_from_frames(frames: Iterable[tuple[int, Any, str]], session_id:
     for ns, fr, ch in frames:
         res = w.offer(fr, clock_ns=ns, crop_hash=ch, session_id=session_id)
         if res.agreed and res.read is not None:
-            out.append({"t_ms": ns // 1_000_000, "home": res.read.left_score, "away": res.read.right_score,
+            out.append({"t_ms": ns // 1_000_000, "away": res.read.left_score, "home": res.read.right_score,  # Madden: away team on the LEFT
                         "quarter": res.read.quarter, "clock_s": res.read.clock_seconds,
                         "clock_red": bool(getattr(res.read, "clock_red", False))})
     return out

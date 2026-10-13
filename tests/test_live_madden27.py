@@ -84,7 +84,7 @@ def test_agent_logs_agreed_reads_and_health():
     for img in [imgs[0]] * 4 + [imgs[1]] * 2 + [imgs[0]] * 3:
         t += 250
         core.on_frame(Frame(t, img, frame_hash(img)))
-    assert any(s.startswith("scorebug agreed: 7-0 Q2") for s in shown)
+    assert any(s.startswith("scorebug agreed: 7-0 (away-home) Q2") for s in shown)
     assert sum(s.startswith("scorebug agreed") for s in shown) == 1  # only NEW agreed values are printed
     health = [s for s in shown if s.startswith("scorebug health")]
     assert health and "score_panel_covered=2" in health[-1]
@@ -138,3 +138,12 @@ def test_red_clock_reads_some_real_frames(reader):
 def test_red_clock_off_switch():
     x = ScorebugReader(read_red_clock=False).read(_frame("q2_14-0_red_022"))
     assert x.ok and x.clock_red and x.clock_text is None and x.detail["clock"] == "clock_red"
+
+
+def test_real_frame_maps_left_to_away(reader):
+    """ATL @ CIN: ATL (away) is the LEFT score. 7-0 ATL must become away=7, home=0."""
+    from qor_receipt.final_detect import agreed_reads_from_frames
+
+    fr = reader.read(_frame("q2_7-0_234"))
+    out = agreed_reads_from_frames([(i * 300_000_000, fr, "h") for i in range(4)])
+    assert (out[-1]["away"], out[-1]["home"]) == (7, 0)
