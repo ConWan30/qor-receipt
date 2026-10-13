@@ -24,3 +24,5 @@ Vision modules need the `[vision]` extra (numpy, opencv-python-headless).
 - 2026-10-13 `local_scorebug/reader.py`: red final-seconds clock is read (`read_red_clock=True` default) from
   contrast-stretched luma instead of HSV value, same clock glyph gates; `FrameRead.clock_red` flag added.
   On the 16 labelled red frames: 5 read correctly, 11 refused, 0 wrong. Upstream this to Qoresence.
+- 2026-10-13 `local_scorebug/reader.py`: `RED_CLOCK_GATE` (NCC >= 0.88, margin >= 0.08) for red seconds digits;
+  the red minute digit must be top-1 "0" (red only in the final minute). Red frames: 14/16 read, 0 wrong.
