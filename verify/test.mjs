@@ -1,0 +1,19 @@
+// node verify/test.mjs : JCS parity + JS verifier against the Python-produced vectors.
+import { readFileSync } from "node:fs";
+import { canonicalize, sha256Hex, verifyReceipt } from "./verify.js";
+const v = JSON.parse(readFileSync(new URL("../tests/vectors/jcs_vector.json", import.meta.url)));
+let fails = 0;
+const ok = (c, m) => { console.log((c ? "ok   " : "FAIL ") + m); if (!c) fails++; };
+ok(canonicalize(v.input) === v.canonical, "jcs canonical parity with python");
+ok((await sha256Hex(v.input)) === v.sha256, "jcs sha256 parity with python");
+const d = JSON.parse(readFileSync(new URL("../tests/vectors/demo_receipt_dual.json", import.meta.url)));
+let r = await verifyReceipt(d.receipt, d.referee_pub);
+ok(r.status === "VERIFIED" && r.trust_tier === "dual-attested", "python receipt VERIFIED dual-attested in JS");
+ok((await verifyReceipt(d.receipt, null)).status === "PARTIAL", "unpinned referee => PARTIAL");
+const t = structuredClone(d.receipt); t.result.home_score = 99;
+ok((await verifyReceipt(t, d.referee_pub)).status === "FAIL", "tampered score => FAIL");
+const t2 = structuredClone(d.receipt); t2.checkpoints.home.splice(3, 1);
+ok((await verifyReceipt(t2, d.referee_pub)).status === "FAIL", "dropped checkpoint => FAIL");
+const t3 = structuredClone(d.receipt); t3.trust_tier = "dual-attested"; t3.match.mode = "single";
+ok((await verifyReceipt(t3, d.referee_pub)).status === "FAIL", "tier upgrade => FAIL");
+process.exit(fails ? 1 : 0);
