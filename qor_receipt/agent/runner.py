@@ -65,7 +65,7 @@ class Prompt:
                 import tkinter as tk
 
                 self.root = tk.Tk()
-                self.root.title("qor-receipt")
+                self.root.title("QorTime")
                 self.root.attributes("-topmost", True)
                 self.label = tk.Label(self.root, text="", font=("Consolas", 22, "bold"), padx=16, pady=12)
                 self.label.pack()

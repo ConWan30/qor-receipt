@@ -2,7 +2,7 @@ name: Pages
 on:
   push:
     branches: [main]
-    paths: ["verify/**", "schema/**", ".github/workflows/pages.yml"]
+    paths: ["site/**", "verify/**", "schema/**", ".github/workflows/pages.yml"]
   workflow_dispatch:
 permissions:
   contents: read
@@ -19,7 +19,7 @@ jobs:
       url: ${{ steps.d.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
-      - run: mkdir -p _site && cp -r verify/. _site/ && mkdir -p _site/schema && cp schema/*.json _site/schema/ && rm -f _site/test.mjs
+      - run: mkdir -p _site/verify _site/schema && cp -r site/. _site/ && rm -f _site/assets/og.svg && cp -r verify/. _site/verify/ && rm -f _site/verify/test.mjs && cp schema/*.json _site/schema/ && touch _site/.nojekyll
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

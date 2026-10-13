@@ -1,11 +1,13 @@
-# qor-receipt
+# QorTime
 
 **Signed, verified match-result receipts for console money-match / escrow platforms**
 (Locked, TrustBridge, ArcadeBet, Wagr, and others). First title: **Madden 27 on PS5**.
 
+QorTime (formerly qor-receipt) seals the moment a match ends. Site: https://conwan30.github.io/qortime/ · Verifier: https://conwan30.github.io/qortime/verify/ . The Python package stays `qor_receipt`; both `qortime` and `qor-receipt` commands work.
+
 A platform holding escrow gets a small JSON receipt saying *who played, the final score, how it
 was observed*, signed by each player's agent and countersigned by an independent **referee**
-service. Anyone can check it offline (CLI) or in a browser ([verifier page](https://conwan30.github.io/qor-receipt/)).
+service. Anyone can check it offline (CLI) or in a browser ([verifier page](https://conwan30.github.io/qortime/verify/)).
 The verdict is **VERIFIED / PARTIAL / FAIL** plus a trust tier: **dual-attested** (both players ran
 agents and their timelines agree) or **single-attested**.
 
@@ -39,7 +41,7 @@ qor_receipt/challenge.py      nonce -> button pattern, HID + vision verifier, mo
 qor_receipt/checkpoints.py    hash chain + referee countersign
 qor_receipt/referee/app.py    FastAPI referee: start, challenge, checkpoint, timeline, finalize, sign
 qor_receipt/final_detect.py   end-of-game from agreed scorebug reads; dual timeline agreement
-qor_receipt/cli.py            qor-receipt emit | verify | pattern
+qor_receipt/cli.py            qortime emit | verify | pattern
 qor_receipt/_vendor/          vendored Qoresence code (scorebug reader/agreement, signing, chain), see VENDORED.md
 verify/                       static verifier (index.html + verify.js + vendored @noble/ed25519)
 ```
@@ -49,8 +51,8 @@ verify/                       static verifier (index.html + verify.js + vendored
 ```bash
 pip install -e ".[dev,vision]"
 pytest -q && node verify/test.mjs
-qor-receipt emit --demo r.json            # synthetic match through the real referee code
-qor-receipt verify r.json --referee-pub <hex>
+qortime emit --demo r.json            # synthetic match through the real referee code
+qortime verify r.json --referee-pub <hex>
 QOR_REFEREE_SEED=<64 hex> uvicorn qor_receipt.referee.app:app   # run a referee
 ```
 

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://conwan30.github.io/qor-receipt/schema/receipt.v0.json",
-  "title": "qor-receipt v0",
+  "$id": "https://conwan30.github.io/qortime/schema/receipt.v0.json",
+  "title": "QorTime receipt v0",
   "description": "Signed match-result receipt. Signed bytes = RFC 8785 JCS of the object without 'signatures'. Only strings, safe integers, booleans, null, arrays and objects are allowed (no floats). Ed25519 signatures by every player and the referee.",
   "type": "object",
   "required": ["schema", "match", "result", "players", "referee", "challenges", "checkpoints", "agreement", "signals", "trust_tier", "signatures"],
