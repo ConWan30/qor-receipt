@@ -56,17 +56,24 @@ qortime verify r.json --referee-pub <hex>
 QOR_REFEREE_SEED=<64 hex> uvicorn qor_receipt.referee.app:app   # run a referee
 ```
 
-## Status (v0 foundation)
+## Status
 
 **Real:** receipt format, JCS (Python and JS parity vector), Ed25519 signing and verification (Python
 and browser), the checkpoint chain with referee countersign, the challenge pattern and HID/latency verifier,
 motion correlation, final detection, dual timeline agreement, the referee API (in-memory), the CLI, the
 static verifier, and the tests and CI.
 
-**Not yet built:** the Windows capture agent, i.e. live capture-card frames → vendored `ScorebugReader`,
-DualSense HID reader, and pause-menu detector. Today tests feed synthetic HID logs, frames and timelines.
-The referee also has no persistence or auth beyond player signatures, there's no TPM yet, and there's no
-platform integration.
+**Windows capture agent: built** (PR #1, `scripts/qor-agent.cmd`): DualSense HID capture, a scorebug
+sampler that requires 3-read agreement, and nonce challenges. The reader fix landed in PR #2; in a live
+Madden test, of 233 sampled frames 143 were read correctly, 90 were refused, and 0 were read wrong.
+
+**Live:** site at <https://conwan30.github.io/qortime/>, verifier at <https://conwan30.github.io/qortime/verify/>.
+
+**Known gaps:**
+- End-of-game final detection (red final-minute clock) still needs hardening.
+- Halftime challenge and real pause timing are not yet confirmed in a full live match.
+- The referee is in-memory only (no persistence or auth beyond player signatures).
+- Phase 2 items (TPM, transparency log) are not started ([PHASE2](docs/PHASE2.md)). No platform integration.
 
 ## Credits
 
