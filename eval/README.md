@@ -29,3 +29,7 @@ Run: `python eval/score_reader.py --root /workspace [--show-wrong] [--json]`
 | quarter (162) | 144 / 18 / 0 | same |
 | clock (162) | 26 / 136 / 0 | 31 / 131 / 0 |
 | clock_red (162) | 40 / 122 / 0 (red only inferred from refusal) | 144 / 18 / 0 |
+
+Red-clock gate (PR after #7): 14/16 red clocks read, 0 wrong (the other 2 are compact strips whose score is
+refused). Overall clock 40 correct / 122 refused / 0 wrong. Thresholds were picked on these same 16 frames
+(small set); a JPEG/blur/shift perturbation test (tests/test_live_madden27.py) shows no wrong reads.

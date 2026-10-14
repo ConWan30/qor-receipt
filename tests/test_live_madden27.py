@@ -25,8 +25,8 @@ EXPECT = {
     "q1_7-0_000": (7, 0, 1, "0:00"),
     "q2_7-0_234": (7, 0, 2, "2:34"),
     "q2_7-0_437": (7, 0, 2, None),
-    "q2_13-0_red": (13, 0, 2, None),   # red final-minute clock: score/quarter still read
-    "q2_14-0_red": (14, 0, 2, None),
+    "q2_13-0_red": (13, 0, 2, "0:27"),  # red final-minute clock (read since red-clock gate)
+    "q2_14-0_red": (14, 0, 2, "0:27"),
     "q3_14-0": (14, 0, 3, None),
     "q2_14-0_022": None,                # compact strip (abbreviations hidden): refuse, never guess
     "refuse_panel_covered": None,       # stat banner over the score panel
@@ -132,7 +132,15 @@ def test_red_clock_read_or_refused_never_wrong(reader, name):
 
 def test_red_clock_reads_some_real_frames(reader):
     got = [reader.read(_frame(n)).clock_text for n in sorted(RED)]
-    assert sum(g is not None for g in got) >= 3, got
+    assert got == [RED[n] for n in sorted(RED)], got
+
+
+@pytest.mark.parametrize("q", [40, 60, 80])
+def test_red_clock_never_wrong_under_recompression(reader, q):
+    for n, want in RED.items():
+        f = cv2.imdecode(cv2.imencode(".jpg", _frame(n), [cv2.IMWRITE_JPEG_QUALITY, q])[1], 1)
+        for img in (f, np.roll(f, 1, 1), np.roll(f, -1, 1), cv2.GaussianBlur(f, (3, 3), 0.6)):
+            assert reader.read(img).clock_text in (None, want)
 
 
 def test_red_clock_off_switch():

@@ -35,9 +35,13 @@ from qor_receipt._vendor.qoresence.vision.local_scorebug.glyphs import (
     hole_signature,
     norm_vec,
 )
-from qor_receipt._vendor.qoresence.vision.local_scorebug.profile import MADDEN27_STANDARD, Box, ScorebugProfile
+from qor_receipt._vendor.qoresence.vision.local_scorebug.profile import MADDEN27_STANDARD, Box, GlyphGate, ScorebugProfile
 
 READER_ID = "local_scorebug_v1"
+# Red final-minute clock (luma glyphs are softer than white): lower NCC floor, LARGER margin over the
+# runner-up than the white gate (0.06) so 1-vs-9 style confusions are refused. Chosen on the 16 labelled
+# red frames of eval/labels/frames-2026-10-13.jsonl (top-1 was right on all; see eval/README.md).
+RED_CLOCK_GATE = GlyphGate(min_score=0.88, min_margin=0.08)
 QUARTER_WORDS = {"1st": 1, "2nd": 2, "3rd": 3, "4th": 4, "ot": 5}
 
 
@@ -384,15 +388,22 @@ class ScorebugReader:
         vecs, why = self.clock_glyphs(band, dx, dy)
         if vecs is None:
             return None, None, why, 0.0, 0.0
-        gate = self.profile.clock_gate
+        patch = self._crop(band, _shift(self.profile.clock_text, dx, dy))
+        red = patch is not None and self.clock_is_red(patch)
+        gate = RED_CLOCK_GATE if red else self.profile.clock_gate
         digits = []
         conf, margin = 1.0, 1.0
-        for vec in vecs:
+        for i, vec in enumerate(vecs):
             m = self.pack.match("clock", vec)
             if m is None:
                 return None, None, "clock_no_templates", 0.0, 0.0
             conf, margin = min(conf, m.best), min(margin, m.margin)
-            if m.best < gate.min_score or m.margin < gate.min_margin:
+            if red and i == 0:
+                # Madden only draws the clock red inside the final minute, so the minute digit
+                # MUST be 0: require top-1 == "0" (a structural check) instead of a margin over "8".
+                if m.label != "0" or m.best < gate.min_score:
+                    return None, None, "clock_red_minute", m.best, m.margin
+            elif m.best < gate.min_score or m.margin < gate.min_margin:
                 return None, None, "clock_unsure", m.best, m.margin
             digits.append(m.label)
         mm, s1, s2 = (int(d) for d in digits)
