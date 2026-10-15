@@ -15,7 +15,12 @@
 ## 4. Final-screen detector
 - Implement `final_basis = final_screen` (it is only a hook today). Keep it fail-closed.
 - Done: Jev 1.14 shadow detector (`qor_receipt/agent/final_screen_jev.py`, hook `AgentCore.final_screen_shadow`).
-  It logs only and never sets the basis. Next: capture real end-of-game frames and run
+  It logs only and never sets the basis. What the final frame looks like (from Con, Madden 27): when the clock
+  hits 0:00 Madden goes straight to an end-of-game **options menu showing the final score** (team names and
+  scores); the bottom scorebug bar is not shown. The Jev criteria describe exactly that and reject the mid-game
+  pause menu (closest look-alike), halftime screens, touchdown graphics and broadcast overlays. Shadow records
+  also carry `last_scorebug` (last agreed quarter/clock) so the deterministic rule can be
+  "last clock seen was Q4 near 0:00" + "menu with final score". Next: capture real end-of-game frames and run
   `scripts/jev_final_screen_smoke.py` on them for recall. Then use `export_labels` shadow labels to build a
   deterministic local detector for `final_screen_detector`. Jev must not become the basis itself.
 

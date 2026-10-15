@@ -1,8 +1,10 @@
 """Jev 1.14 (TypeSafe System One) final-screen detector -- SHADOW MODE ONLY.
 
-Asks one yes/no (Noul) question per sampled frame: "Is this frame Madden's end-of-game final score
-screen?". Results are written to the session log as ``{"jev_final_screen": {...}}`` records (model id,
-frame sha256, answer, p_yes, confidence, latency) and NEVER feed ``final_screen`` spans, ``detect_final``,
+Asks one yes/no (Noul) question per sampled frame: is this Madden 27's post-game options menu with the
+final score? (Per the player: when the clock hits 0:00 Madden goes straight to an end-of-game options menu
+showing both teams' final scores; the bottom scorebug bar is not shown.) Results are written to the session log as ``{"jev_final_screen": {...}}`` records (model id,
+frame sha256, answer, p_yes, confidence, latency, and optionally ``last_scorebug`` = the last agreed
+scorebug quarter/clock read before the frame) and NEVER feed ``final_screen`` spans, ``detect_final``,
 ``compute_tier``, score digits, or the signed receipt. They exist to collect labels for a future
 deterministic local detector (see :func:`export_labels`).
 
@@ -38,13 +40,22 @@ DANGER_ZONE_IMAGES = "TypeSafe-Danger-Zone-Images"
 KEY_ENV = "TYPESAFE_API_KEY"
 MODE_ENV = "QORTIME_JEV_FINAL_SCREEN"
 QUESTION_ID = "is_final_screen"
-QUESTION = "Is this frame (`frame`) Madden's end-of-game final score screen?"
-CRITERIA_TRUE = ("The Madden NFL end-of-game screen after the game is over: a large FINAL (or 'Final') label "
-                 "with both teams' final scores shown prominently, typically on a game-summary / final score "
-                 "screen. The normal bottom scorebug strip is not shown.")
-CRITERIA_FALSE = ("Anything else: live gameplay, replays, the pause menu, halftime or end-of-quarter stats "
-                  "screens, broadcast scoreboard overlays during play, menus, loading screens, or system "
-                  "overlays.")
+QUESTION = ("Is this frame (`frame`) Madden NFL's post-game options menu that appears right after the game "
+            "clock reaches 0:00 in the 4th quarter, showing the FINAL score of both teams?")
+CRITERIA_TRUE = ("Madden NFL's end-of-game screen: as soon as the game clock hits 0:00 at the end of the game, Madden "
+                 "goes straight to an options menu (a vertical list of menu options) displayed together with a final "
+                 "score summary showing both team names and both teams' scores. The bottom scorebug bar is NOT "
+                 "shown. Strong signs that it is the end of the game: the word FINAL (or 'Final', 'Game Over', "
+                 "'End of Game') or other post-game wording, a 4th quarter (or overtime) clock at 0:00, and "
+                 "post-game options (e.g. continue, view game stats, quit/exit game) rather than resume-play "
+                 "options.")
+CRITERIA_FALSE = ("Anything that is not that post-game menu. In particular these are NOT final: the pause menu "
+                  "during play (a similar-looking menu with the score, but the quarter/clock is not the end of the "
+                  "game, e.g. a 1st-3rd quarter or a clock above 0:00, or a 'Resume' option and no FINAL/post-game "
+                  "wording); halftime screens (halftime report or stats); touchdown or other score graphics; "
+                  "broadcast scoreboard overlays during play; live gameplay; replays; loading screens; other "
+                  "menus; and system overlays. A menu with a score but no FINAL wording and no visible 4th-quarter "
+                  "0:00 clock should be treated as a pause menu (answer false).")
 
 MIN_SIDE, MAX_SIDE = 256, 1568
 MIN_PIXELS, MAX_PIXELS = 78_400, 2_458_624
@@ -147,7 +158,8 @@ class JevFinalScreenDetector:
                  model: str = MODEL, min_interval_s: float = 5.0, timeout_s: float = 15.0,
                  examples: list[tuple[Any, bool]] | None = None,
                  http_post: Callable[..., tuple[int, Any]] | None = None,
-                 clock: Callable[[], float] = time.monotonic, url: str = API_URL) -> None:
+                 clock: Callable[[], float] = time.monotonic, url: str = API_URL,
+                 last_clock: Callable[[], dict | None] | None = None) -> None:
         self.api_key = api_key if api_key is not None else os.environ.get(KEY_ENV)
         self.log = log
         self.model = model
@@ -157,6 +169,7 @@ class JevFinalScreenDetector:
         self.http_post = http_post or _httpx_post
         self.clock = clock
         self.url = url
+        self.last_clock = last_clock  # optional: latest agreed scorebug read (quarter/clock_s), log only
         self._last_submit: float | None = None
         self._q: queue.Queue = queue.Queue(maxsize=1)
         self._worker: threading.Thread | None = None
@@ -206,7 +219,7 @@ class JevFinalScreenDetector:
             self.stats["rate_limited"] += 1
             return False
         try:
-            self._q.put_nowait((img.copy() if hasattr(img, "copy") else img, t_ms))
+            self._q.put_nowait((img.copy() if hasattr(img, "copy") else img, t_ms, self._last_scorebug()))
         except queue.Full:
             self.stats["busy"] += 1
             return False
@@ -214,6 +227,20 @@ class JevFinalScreenDetector:
         self.stats["submitted"] += 1
         self._ensure_worker()
         return True
+
+    def _last_scorebug(self) -> dict | None:
+        """Snapshot of the last agreed scorebug clock read, for later correlation only (e.g. a deterministic
+        rule "last clock seen was Q4 near 0:00" + "menu with final score"). Never raises; never used for
+        the basis or the tier."""
+        if self.last_clock is None:
+            return None
+        try:
+            r = self.last_clock()
+            if not r:
+                return None
+            return {"t_ms": r.get("t_ms"), "quarter": r.get("quarter"), "clock_s": r.get("clock_s")}
+        except Exception:  # noqa: BLE001
+            return None
 
     __call__ = submit  # usable directly as AgentCore.final_screen_shadow(image, t_ms)
 
@@ -230,8 +257,10 @@ class JevFinalScreenDetector:
                 continue
             if item is None:
                 break
-            img, t_ms = item
+            img, t_ms, last = item
             rec = self.classify(img)
+            if last is not None:
+                rec["last_scorebug"] = last
             rec["t_ms"] = t_ms
             rec["mode"] = "shadow"
             if self.log:
