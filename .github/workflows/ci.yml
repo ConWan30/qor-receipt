@@ -31,3 +31,7 @@ jobs:
         with:
           node-version: "20"
       - run: node verify/test.mjs
+      - run: npm ci
+        working-directory: services/verified-match
+      - run: npm test
+        working-directory: services/verified-match

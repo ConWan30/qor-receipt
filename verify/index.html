@@ -1,16 +1,36 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>QorTime verifier</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@800;900&family=Inter+Tight:wght@500;600;700&display=swap" rel="stylesheet">
 <style>
-body{font:16px system-ui,sans-serif;max-width:860px;margin:2rem auto;padding:0 1rem;background:#0d1117;color:#e6edf3}
+body{font:16px/1.5 "Inter Tight",system-ui,sans-serif;max-width:860px;margin:2rem auto;padding:0 1rem;background:#04050a;color:#e6edf3}
 textarea,input{width:100%;box-sizing:border-box;background:#161b22;color:#e6edf3;border:1px solid #30363d;border-radius:6px;padding:.5rem;font:13px ui-monospace,monospace}
 textarea{height:260px}button{margin-top:.75rem;padding:.6rem 1.2rem;font-weight:600;border-radius:6px;border:0;cursor:pointer}
+button:disabled{opacity:.45;cursor:not-allowed}
 #badge{font-size:2rem;font-weight:800;margin-top:1rem}.VERIFIED{color:#3fb950}.PARTIAL{color:#d29922}.FAIL{color:#f85149}
 .tier{display:inline-block;margin-left:1rem;font-size:1rem;padding:.2rem .6rem;border:1px solid #30363d;border-radius:99px}
 pre{background:#161b22;padding:.75rem;border-radius:6px;white-space:pre-wrap}small{color:#8b949e}
+.vm{margin:1.25rem 0;padding:1.1rem 1.15rem;border-radius:18px;border:1px solid rgba(228,197,109,.4);background:radial-gradient(420px 180px at 100% 0%,rgba(46,242,255,.14),transparent 60%),linear-gradient(165deg,#0c1c33,#071018)}
+.vm h2{margin:.2rem 0 .4rem;font:900 28px/1 "Big Shoulders Display",Impact,sans-serif;letter-spacing:.08em;text-transform:uppercase}
+.vm-test{margin-left:.4rem;font:700 11px ui-monospace,monospace;letter-spacing:.16em;color:#8ee7f2;border:1px solid rgba(142,231,242,.5);border-radius:999px;padding:.15rem .45rem;vertical-align:middle}
+.vm-badge{display:inline-flex;align-items:center;gap:.7rem;margin:.7rem 0;padding:.7rem 1rem;border-radius:999px;font:900 18px/1 "Big Shoulders Display",Impact,sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#1a1408;background:linear-gradient(105deg,#f8efc8,#e4c56d 55%,#7fe7f2);box-shadow:0 0 0 1px rgba(228,197,109,.7),0 12px 36px rgba(228,197,109,.28)}
+.vm-badge small{color:#3a3018;font:700 11px ui-monospace,monospace;letter-spacing:.18em}
+#vm-buy{color:#1a1408;background:linear-gradient(105deg,#f8efc8,#e4c56d 50%,#7fe7f2)}
+#vm-err{color:#ffb020;min-height:1.2em}
+#vm-return{color:#f0d78a}
 </style></head><body>
 <h1>QorTime verifier</h1><p><small><a href="../" style="color:#7df9ff">← QorTime home</a></small></p>
-<p><small>Runs entirely in your browser. Nothing is uploaded. Checks Ed25519 signatures (players + referee), the referee-countersigned checkpoint chain, nonce challenges, and the trust tier.</small></p>
+<p><small>Signature checks run in this browser. The receipt JSON is not uploaded. The Verified Match badge sends only the receipt id to the test checkout service.</small></p>
+<section class="vm" id="vm">
+ <h2>Verified Match <span class="vm-test">test mode</span></h2>
+ <p><small>Gold badge means this receipt id has a paid Stripe test Checkout for Verified Match ($9.99). It is separate from the signature verdict. Live payouts stay off until KYC is done.</small></p>
+ <p id="vm-return" hidden></p>
+ <div id="vm-badge" class="vm-badge" hidden>Verified Match <small>TEST MODE</small></div>
+ <p id="vm-state"><small>Paste a receipt to look up its id.</small></p>
+ <button id="vm-buy" type="button" disabled>Checkout this receipt (test)</button>
+ <p id="vm-err"></p>
+</section>
 <label>Receipt JSON (paste or choose a file)</label>
 <input type="file" id="file" accept=".json,application/json">
 <textarea id="json" placeholder='{"schema":"qor-receipt/v0", ...}'></textarea>
@@ -20,9 +40,91 @@ pre{background:#161b22;padding:.75rem;border-radius:6px;white-space:pre-wrap}sma
 <div id="badge"></div><pre id="out" hidden></pre>
 <script type="module">
 import { verifyReceipt } from "./verify.js";
+import { apiBase, isValidReceiptId, receiptIdFrom } from "./verified-match.js";
 const $ = (id) => document.getElementById(id);
 const q = new URLSearchParams(location.search); if (q.get("referee")) $("pub").value = q.get("referee");
-$("file").onchange = async (e) => { $("json").value = await e.target.files[0].text(); };
+let pollTimer = 0;
+
+function currentReceipt() {
+  try { return JSON.parse($("json").value); } catch { return null; }
+}
+
+function setPaid(data, id) {
+  const paid = data?.paid === true;
+  $("vm-badge").hidden = !paid;
+  const status = data?.payment_status;
+  if (!apiBase()) {
+    $("vm-state").innerHTML = "<small>Receipt checkout API is not configured on this deploy yet. The Payment Link on the home page still opens Stripe test checkout.</small>";
+    $("vm-buy").disabled = true;
+    return;
+  }
+  $("vm-buy").disabled = !id;
+  if (paid) {
+    $("vm-state").textContent = `Test payment recorded for ${id}. This badge is test-mode until live KYC. It does not change the signature verdict.`;
+  } else if (status === "failed") {
+    $("vm-state").textContent = `Test payment for ${id} did not succeed. You can start checkout again.`;
+  } else if (id) {
+    $("vm-state").textContent = `No test payment recorded for ${id} yet.`;
+  } else {
+    $("vm-state").innerHTML = "<small>Paste a receipt to look up its id.</small>";
+  }
+}
+
+async function refreshPaid(id) {
+  $("vm-err").textContent = "";
+  if (!id) { setPaid(null, null); return; }
+  const base = apiBase();
+  if (!base) { setPaid(null, id); return; }
+  const res = await fetch(`${base}/v1/receipts/${encodeURIComponent(id)}`);
+  if (!res.ok) throw new Error(`Paid lookup failed (${res.status})`);
+  setPaid(await res.json(), id);
+}
+
+function watchReceipt() {
+  const id = receiptIdFrom(currentReceipt());
+  refreshPaid(id).catch((err) => { $("vm-err").textContent = err instanceof Error ? err.message : "Paid lookup failed"; });
+}
+
+$("file").onchange = async (e) => { $("json").value = await e.target.files[0].text(); watchReceipt(); };
+$("json").addEventListener("input", watchReceipt);
+$("vm-buy").onclick = async () => {
+  const id = receiptIdFrom(currentReceipt());
+  $("vm-err").textContent = "";
+  const base = apiBase();
+  if (!base || !id) { $("vm-err").textContent = "Paste a receipt with a match id first."; return; }
+  $("vm-buy").disabled = true;
+  try {
+    const res = await fetch(`${base}/v1/checkout`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ receipt_id: id }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `Checkout failed (${res.status})`);
+    if (typeof data.url !== "string" || !data.url.startsWith("https://checkout.stripe.com/")) {
+      throw new Error("Checkout did not return a Stripe-hosted URL.");
+    }
+    location.href = data.url;
+  } catch (err) {
+    $("vm-err").textContent = err instanceof Error ? err.message : "Checkout failed";
+    $("vm-buy").disabled = false;
+  }
+};
+
+const returned = q.get("receipt_id");
+if (q.get("checkout") === "success" && isValidReceiptId(returned)) {
+  $("vm-return").hidden = false;
+  $("vm-return").textContent = "Test checkout returned. The gold badge appears after the webhook records this receipt. Still test mode.";
+  let tries = 0;
+  const tick = () => refreshPaid(returned).catch((err) => { $("vm-err").textContent = err instanceof Error ? err.message : "Paid lookup failed"; });
+  tick();
+  pollTimer = setInterval(() => {
+    tries += 1;
+    if (tries > 15 || !$("vm-badge").hidden) { clearInterval(pollTimer); return; }
+    tick();
+  }, 2000);
+}
+
 $("go").onclick = async () => {
   let r; try { r = JSON.parse($("json").value); } catch { $("badge").className = "FAIL"; $("badge").textContent = "FAIL: not JSON"; return; }
   const v = await verifyReceipt(r, $("pub").value.trim() || null);
@@ -32,5 +134,6 @@ $("go").onclick = async () => {
   $("out").hidden = false;
   $("out").textContent = `match ${r.match?.match_id}  ${r.match?.game}/${r.match?.platform}\n` +
     `final: away ${res.away_score} @ home ${res.home_score} (Q${res.quarter}), winner ${res.winner}\n\n` + JSON.stringify(v, null, 2);
+  watchReceipt();
 };
 </script></body></html>

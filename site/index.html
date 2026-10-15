@@ -27,6 +27,8 @@
   <h1 class="kinetic"><span class="line">The final</span><span class="line">whistle,</span><span class="line accent">sealed.</span></h1>
   <p class="lede reveal-up">QorTime reads the final score off the screen, proves a real human is on the DualSense, and seals the moment in an Ed25519 receipt a referee co-signs. Anyone can verify it in a browser.</p>
   <div class="ctas reveal-up"><a class="btn mag" href="verify/"><span>Verify a receipt</span></a><a class="btn ghost mag" href="https://github.com/ConWan30/qortime"><span>View on GitHub</span></a></div>
+  <div class="ctas reveal-up vm-hero"><a class="btn vm mag" href="https://buy.stripe.com/test_3cI4gy7he9Uuarqczl00000" target="_blank" rel="noopener noreferrer"><span>Buy Verified Match (test)</span></a></div>
+  <p class="vm-hero-note reveal-up">Stripe test mode · $9.99 USD · test charges only</p>
  </div>
  <div class="hero-foot reveal-up"><span>scroll to seal a match</span><i></i></div>
  <div class="marquee" aria-hidden="true"><div class="mq-track"><span>CAPTURE ◆ CHALLENGE ◆ CO-SIGN ◆ SEAL ◆ VERIFY ◆ </span><span>CAPTURE ◆ CHALLENGE ◆ CO-SIGN ◆ SEAL ◆ VERIFY ◆ </span></div></div>
@@ -164,6 +166,30 @@ receipt_hash</pre>
  <p>A VERIFIED receipt says the score on the screen was read by an agent with a live human on that controller at those times. It does <b>not</b> prove:</p>
  <ul><li><b>Account sharing:</b> who is physically holding the controller.</li><li><b>Collusion:</b> both players agreeing to throw or fake a match.</li><li>Anything outside what the capture card saw.</li></ul>
  <a class="btn ghost mag" href="https://github.com/ConWan30/qortime/blob/main/docs/RISKS.md"><span>Read RISKS.md</span></a></div>
+</section>
+
+<section class="wrap vm" id="verified-match">
+ <div class="vm-panel glass">
+  <div class="vm-grid">
+   <div>
+    <p class="vm-kicker"><span class="dot"></span> test mode · verified match</p>
+    <h2 class="split">Buy the seal. Test money only.</h2>
+    <p>Verified Match is a $9.99 one-time Stripe checkout for a hosted referee countersignature after a completed match. This button opens the Stripe test Payment Link. Business KYC is still open, so the badge stays in test mode.</p>
+    <ul class="ticks"><li>$9.99 USD · one-time · Verified Match</li><li>test card 4242 4242 4242 4242</li><li>tie a receipt id from the verifier</li></ul>
+    <div class="ctas"><a class="btn vm mag" href="https://buy.stripe.com/test_3cI4gy7he9Uuarqczl00000" target="_blank" rel="noopener noreferrer"><span>Buy Verified Match (test)</span></a><a class="btn ghost mag" href="verify/"><span>Tie a receipt</span></a></div>
+    <p class="vm-cancel" id="vm-cancel" hidden>Test checkout canceled. Nothing was recorded as paid.</p>
+    <p class="note">The gold badge on the verifier appears after the webhook records that receipt id. A Payment Link purchase alone has no receipt id.</p>
+   </div>
+   <div class="vm-seal" aria-hidden="true">
+    <div class="vm-coin">
+     <img src="assets/logo.svg" alt="" width="64" height="64">
+     <b>Verified Match</b>
+     <span>TEST MODE</span>
+     <small>$9.99</small>
+    </div>
+   </div>
+  </div>
+ </div>
 </section>
 
 <section class="wrap cta">

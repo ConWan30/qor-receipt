@@ -3,6 +3,10 @@
   const fine = matchMedia('(pointer: fine)').matches;
   const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [...r.querySelectorAll(s)];
   if (RM) document.documentElement.classList.add('rm');
+  if (new URLSearchParams(location.search).get('checkout') === 'cancel') {
+    const note = document.getElementById('vm-cancel');
+    if (note) note.hidden = false;
+  }
 
   // digit columns (final value is the resting state)
   $$('.dg').forEach(d => {
@@ -64,7 +68,7 @@
     words.forEach((w, i) => { const o = document.createElement('span'); o.className = 'w'; const n = document.createElement('span'); n.textContent = w; o.appendChild(n); h.appendChild(o); if (i < words.length - 1) h.appendChild(document.createTextNode(' ')); });
     gsap.from(h.querySelectorAll('.w>span'), { yPercent: 110, duration: 1, ease: 'expo.out', stagger: .06, scrollTrigger: { trigger: h, start: 'top 85%' } });
   });
-  $$('.scene-copy p:not(.num), .ticks, .tiers, .cards .card, .limits, .cta p, .cta .ctas').forEach(el =>
+  $$('.scene-copy p:not(.num), .ticks, .tiers, .cards .card, .limits, .cta p, .cta .ctas, .vm-panel').forEach(el =>
     gsap.from(el, { y: 40, opacity: 0, duration: 1, ease: 'expo.out', scrollTrigger: { trigger: el, start: 'top 90%' } }));
 
   const mobile = innerWidth < 900;
