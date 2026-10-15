@@ -19,11 +19,13 @@
 
   // hero WebGL (lazy, with fallback)
   const canvas = $('#gl');
-  const glOK = (() => { try { const c = document.createElement('canvas'); return !!(c.getContext('webgl2') || c.getContext('webgl')); } catch { return false; } })();
-  if (!glOK || RM) document.documentElement.classList.add('no-gl');
-  else {
-    const start = () => import('./gl.js').then(m => m.init(canvas, { fine })).catch(() => document.documentElement.classList.add('no-gl'));
-    (window.requestIdleCallback || (f => setTimeout(f, 60)))(start, { timeout: 400 });
+  if (canvas) {
+    const glOK = (() => { try { const c = document.createElement('canvas'); return !!(c.getContext('webgl2') || c.getContext('webgl')); } catch { return false; } })();
+    if (!glOK || RM) document.documentElement.classList.add('no-gl');
+    else {
+      const start = () => import('./gl.js').then(m => m.init(canvas, { fine })).catch(() => document.documentElement.classList.add('no-gl'));
+      (window.requestIdleCallback || (f => setTimeout(f, 60)))(start, { timeout: 400 });
+    }
   }
 
   if (RM || !window.gsap) return; // calm static version: everything already in its final state
@@ -60,7 +62,7 @@
     .from('h1 .ch', { yPercent: 115, rotate: 8, opacity: 0, duration: 1.1, ease: 'expo.out', stagger: .035 })
     .from('.reveal-up', { y: 30, opacity: 0, duration: 1, ease: 'expo.out', stagger: .12 }, .5)
     .from('.nav', { y: -80, opacity: 0, duration: 1, ease: 'expo.out' }, .3);
-  gsap.to('.hero-copy', { yPercent: -30, opacity: .2, ease: 'none', scrollTrigger: { trigger: '.hero', start: 'top top', end: 'bottom top', scrub: true } });
+  if ($('.hero-copy')) gsap.to('.hero-copy', { yPercent: -30, opacity: .2, ease: 'none', scrollTrigger: { trigger: '.hero', start: 'top top', end: 'bottom top', scrub: true } });
 
   // split headings
   $$('.split').forEach(h => {
@@ -76,6 +78,7 @@
 
   // 01 scorebug digit-by-digit then sealed
   const sb = $('#scorebug');
+  if (!sb) return;
   const t1 = gsap.timeline({ scrollTrigger: { ...pin('#capture', 140), onUpdate: s => sb.classList.toggle('locked', s.progress > .62) } });
   t1.from(sb, { scale: .85, rotateX: 30, opacity: 0, duration: .6, transformPerspective: 800 })
     .fromTo('.scan', { x: 0 }, { x: () => sb.offsetWidth + 200, duration: 1.2, ease: 'none', repeat: 1 }, .3)

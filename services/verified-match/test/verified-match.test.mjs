@@ -301,5 +301,26 @@ test("launch page and verifier mention the test payment link", async () => {
   assert.match(verify, /Verified Match/);
   assert.match(verify, /verified-match\.js/);
   assert.match(config, /buy\.stripe\.com\/test_3cI4gy7he9Uuarqczl00000/);
+  assert.match(config, /apiBase: "https:\/\/qortime-verified-match-production\.up\.railway\.app"/);
+  assert.match(home, /id="verified-match"/);
+  assert.match(home, /href="pricing\/"/);
+  assert.match(home, /href="how-it-works\/"/);
+  assert.match(home, /How it works/);
+  assert.match(home, /early access/i);
+  assert.match(home, /stripe test mode/i);
+  assert.match(home, /og:description/);
+  assert.match(config, /apiBase: "https:\/\/qortime-verified-match-production\.up\.railway\.app"/);
+  assert.equal(config.includes('apiBase: "https://qortime-verified-match-production.up.railway.app/"'), false);
+  const pricing = await readFile(join(ROOT, "site/pricing/index.html"), "utf8");
+  const how = await readFile(join(ROOT, "site/how-it-works/index.html"), "utf8");
+  const readme = await readFile(join(ROOT, "README.md"), "utf8");
+  for (const page of [pricing, how, home, readme]) {
+    assert.match(page, /early access/i);
+    assert.match(page, /test mode/i);
+    assert.doesNotMatch(page, /live paid product for sale|now accepting live payments/i);
+  }
+  assert.match(pricing, /\$9\.99/);
+  assert.match(how, /Checkout this receipt \(test\)/);
+  assert.match(readme, /https:\/\/conwan30\.github\.io\/qortime\/pricing\//);
   assert.doesNotMatch(home + verify + config, /sk_live_|sk_test_|whsec_/);
 });

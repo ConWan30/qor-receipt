@@ -47,7 +47,16 @@ Prefer a **restricted test key** (`rk_test_…`) with write access to Checkout S
 4. **Store** is a JSON object at `STORE_PATH` (default `/data/receipts.json`). On Railway, mount a volume at `/data` so a redeploy does not wipe paid receipts.
 5. **Verifier badge** on `verify/index.html`. The receipt id is `receipt_id` when present, otherwise `match.match_id`. `GET /v1/receipts/:receipt_id` drives a gold **Verified Match** badge labeled **TEST MODE**. The signature verdict is unchanged. The receipt JSON is not uploaded.
 
-`verify/verified-match.js` holds the public catalog ids and `apiBase`. Set `apiBase` to the deployed service origin (no trailing slash) when the host URL exists. On `localhost` only, `?api=http://127.0.0.1:PORT` overrides it for a local badge check.
+`verify/verified-match.js` holds the public catalog ids and `apiBase`.
+
+| | |
+|---|---|
+| Service origin | `https://qortime-verified-match-production.up.railway.app` |
+| Health | `GET /health` — test mode; key, webhook, and price report configured |
+| Pages links | Nav **Pricing** (`/pricing/`) and **How it works** (`/how-it-works/`). Home also has `#pricing`. Labels say early access and Stripe test mode. |
+| `apiBase` | `https://qortime-verified-match-production.up.railway.app` (no trailing slash) |
+
+On `localhost` only, `?api=http://127.0.0.1:PORT` overrides `apiBase` for a local badge check.
 
 ## Environment
 
@@ -82,7 +91,7 @@ Receipt ids are 1–128 characters from `[A-Za-z0-9._:-]`.
 
 ## Deploy (Railway)
 
-The service is `services/verified-match` (Dockerfile, `railway.toml`). Root directory on Railway: `services/verified-match`. Health check: `/health`. Volume mount: `/data`.
+The service is `services/verified-match` (Dockerfile, `railway.toml`). It is deployed at `https://qortime-verified-match-production.up.railway.app`. Root directory on Railway: `services/verified-match`. Health check: `/health`. Volume mount: `/data`.
 
 ```bash
 cd services/verified-match
@@ -91,12 +100,13 @@ npm test
 npm start
 ```
 
-Operator steps still required before a real test card payment can stamp a badge:
+The host already reports a test key, a configured webhook, and `STRIPE_PRICE_ID`. Those values stay in Railway. Do not copy them into git.
 
-1. Put `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, and `STRIPE_PRICE_ID` in the Railway service variables (or whatever host you use). Do not commit them.
-2. In the Stripe **test** Dashboard, add a webhook endpoint aimed at `https://<service-host>/v1/webhook` for the three `checkout.session.*` events above. Paste its signing secret into `STRIPE_WEBHOOK_SECRET`.
-3. Set `apiBase` in `verify/verified-match.js` to `https://<service-host>` and deploy GitHub Pages (push to `main` updates `site/**` and `verify/**`).
-4. Keep the service awake. A sleeping host can miss the webhook that paints the badge.
+Still required from the operator:
+
+1. Merge so GitHub Pages publishes `apiBase` (`site/**` and `verify/**` deploy from `main`).
+2. Keep the service awake. A sleeping host can miss the webhook that paints the badge.
+3. Stay on this test host until business KYC is done. Do not point `apiBase` at a live-mode key.
 
 Local webhook forwarding, once the secret is in the environment and not in git:
 

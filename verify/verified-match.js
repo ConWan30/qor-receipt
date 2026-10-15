@@ -6,7 +6,7 @@ export const VERIFIED_MATCH = {
   priceId: "price_1UQruXCepyIJsHZulKEdcVkX",
   paymentLinkId: "plink_1UQrueCepyIJsHZuXcqSnjnH",
   paymentLinkUrl: "https://buy.stripe.com/test_3cI4gy7he9Uuarqczl00000",
-  apiBase: "",
+  apiBase: "https://qortime-verified-match-production.up.railway.app",
 };
 
 export function isValidReceiptId(value) {
