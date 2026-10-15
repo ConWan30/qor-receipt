@@ -79,12 +79,19 @@ Madden test, of 233 sampled frames 143 were read correctly, 90 were refused, and
 ## Jev final-screen detector (shadow mode)
 
 `qor_receipt/agent/final_screen_jev.py` asks TypeSafe Jev 1.14 (model pinned to `jev-1.14.0`; `jev-latest`
-is still 1.13) one yes/no (Noul) question while the scorebug is absent: *"Is this frame Madden's end-of-game
-final score screen?"*. It runs in a background worker (at most one call per 5 s, 15 s timeout; a busy worker
+is still 1.13) one yes/no (Noul) question while the scorebug is absent: is this Madden's
+**post-game options menu with the final score**? Per the player (Madden 27): as soon as the game clock hits
+0:00, Madden goes straight to an end-of-game options menu (a list of menu options) that shows the final score
+(both team names and scores); the bottom scorebug bar is not shown. That menu is the final frame. The criteria
+explicitly reject the mid-game pause menu (the most likely false positive: it looks similar, so the criteria
+key on FINAL/post-game wording and a 4th-quarter 0:00 clock), halftime screens, touchdown/score graphics and
+broadcast scoreboard overlays. It runs in a background worker (at most one call per 5 s, 15 s timeout; a busy worker
 or the rate limit drops the frame), resizes frames to the image limits, and treats any error as `unknown`.
 
 **Shadow only.** Results go to the session log as `jev_final_screen` records (model, frame sha256, answer,
-p_yes, confidence, latency). They are wired through `AgentCore.final_screen_shadow`, whose return value is
+p_yes, confidence, latency, plus `last_scorebug` = the last agreed scorebug `{t_ms, quarter, clock_s}` when
+one exists, so a later deterministic rule can require "last clock seen was Q4 near 0:00" + "menu with final
+score"). They are wired through `AgentCore.final_screen_shadow`, whose return value is
 ignored, so they never open a `final_screen` span, never set `final_basis`, and never feed the trust tier,
 the score digits, or the signed receipt.
 
@@ -92,7 +99,9 @@ the score digits, or the signed receipt.
 - `export_labels(session_log, out)` turns shadow records into weak labels for a future local detector.
 - Live smoke: `python scripts/jev_final_screen_smoke.py --root /workspace` (needs the key and the eval images).
   First run (2026-10-14, 13 real negatives: gameplay, absent strip, pause, touchdown, broadcast overlay,
-  halftime report/stats): 0 false yes, p_yes 0.01-0.02, median latency about 200 ms. **No real final screen has
+  halftime report/stats): 0 false yes, p_yes 0.01-0.02, median latency about 200 ms. Re-run 2026-10-15 with
+the post-game-options-menu criteria on the same 13 frames: 0 false yes; both pause-menu frames `no`
+(p_yes 0.02); all others p_yes 0.01-0.02; median 194 ms. **No real final screen has
   been captured yet**, so recall is untested.
 
 ## Credits
