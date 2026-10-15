@@ -508,7 +508,7 @@ def run_live(*, device: str, referee: str, cfg: AgentConfig, out: Path, key, mat
     core = AgentCore(client, key, cfg, prompt, log)
     from .final_screen_jev import from_env as jev_from_env
 
-    jev = jev_from_env(log)  # QORTIME_JEV_FINAL_SCREEN=shadow|off; shadow only with TYPESAFE_API_KEY
+    jev = jev_from_env(log, last_clock=lambda: core.reads[-1] if core.reads else None)  # QORTIME_JEV_FINAL_SCREEN=shadow|off; shadow only with TYPESAFE_API_KEY
     if jev is not None:
         core.final_screen_shadow = jev.submit
         prompt.show(f"Jev final-screen detector: shadow mode ({jev.model}), log only")

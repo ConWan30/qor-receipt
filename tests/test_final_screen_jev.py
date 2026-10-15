@@ -59,7 +59,7 @@ def test_request_shape_headers_model_pin_asset_referenced():
     b = c["body"]
     assert b["model"] == "jev-1.14.0" and b["model"] != "jev-latest"
     q = b["questions"][fj.QUESTION_ID]
-    assert q["type"] == "noul" and "final score screen" in q["instructions"] and set(q["criteria"]) == {"true", "false"}
+    assert q["type"] == "noul" and "options menu" in q["instructions"] and "0:00" in q["instructions"] and set(q["criteria"]) == {"true", "false"}
     (ref,) = b["assets"]
     assert b["state"] == {"frame": ref}
     a = b["assets"][ref]
@@ -236,3 +236,32 @@ def test_session_log_threadsafe_and_labels(tmp_path):
     assert n == 1
     row = json.loads((tmp_path / "labels.jsonl").read_text())
     assert row["label"] is True and row["model"] == "jev-1.14.0" and row["t_ms"] == 10
+
+
+def test_criteria_describe_post_game_menu_and_exclude_pause_menu():
+    t, f = fj.CRITERIA_TRUE.lower(), fj.CRITERIA_FALSE.lower()
+    assert "options menu" in t and "0:00" in t and "final" in t and "scorebug bar is not" in t
+    for neg in ("pause menu", "halftime", "touchdown", "broadcast scoreboard"):
+        assert neg in f
+    assert "4th quarter" in t and "resume" in f
+
+
+def test_last_scorebug_logged_but_not_sent_and_optional():
+    http = FakeHTTP()
+    logs = []
+    last = {"t_ms": 900, "quarter": 4, "clock_s": 0, "home": 21, "away": 14}
+    d = fj.JevFinalScreenDetector("k", http_post=http, log=logs.append, last_clock=lambda: last)
+    assert d.submit(frame(), 1000)
+    d.drain(); d.close()
+    (r,) = logs
+    assert r["jev_final_screen"]["last_scorebug"] == {"t_ms": 900, "quarter": 4, "clock_s": 0}
+    assert "last_scorebug" not in json.dumps(http.calls[0]["body"])
+
+    def boom():
+        raise RuntimeError("x")
+    for lc in (None, lambda: None, boom):
+        logs.clear()
+        d = fj.JevFinalScreenDetector("k", http_post=FakeHTTP(), log=logs.append, last_clock=lc)
+        assert d.submit(frame(), 1)
+        d.drain(); d.close()
+        assert "last_scorebug" not in logs[0]["jev_final_screen"]
