@@ -5,6 +5,14 @@
 
 QorTime (formerly qor-receipt) seals the moment a match ends. Site: https://conwan30.github.io/qortime/ · Verifier: https://conwan30.github.io/qortime/verify/ . The Python package stays `qor_receipt`; both `qortime` and `qor-receipt` commands work.
 
+## Try it
+
+- Site: https://conwan30.github.io/qortime/
+- Verify in the browser: https://conwan30.github.io/qortime/verify/
+- How it works: https://conwan30.github.io/qortime/how-it-works/
+- Pricing: https://conwan30.github.io/qortime/pricing/
+- **Verified Match** ($9.99 hosted-referee countersign): [early access](https://conwan30.github.io/qortime/early-access/) / Stripe **test** mode until business KYC. This is not a live paid product for real money. Test Payment Link: https://buy.stripe.com/test_3cI4gy7he9Uuarqczl00000
+
 A platform holding escrow gets a small JSON receipt saying *who played, the final score, how it
 was observed*, signed by each player's agent and countersigned by an independent **referee**
 service. Anyone can check it offline (CLI) or in a browser ([verifier page](https://conwan30.github.io/qortime/verify/)).
@@ -68,6 +76,8 @@ sampler that requires 3-read agreement, and nonce challenges. The reader fix lan
 Madden test, of 233 sampled frames 143 were read correctly, 90 were refused, and 0 were read wrong.
 
 **Live:** site at <https://conwan30.github.io/qortime/>, verifier at <https://conwan30.github.io/qortime/verify/>.
+
+**Verified Match (early access / test):** $9.99 list price for a hosted-referee countersign. Stripe checkout is test mode until business KYC. It is not a live paid product for real money. See [docs/STRIPE_VERIFIED_MATCH_TEST.md](docs/STRIPE_VERIFIED_MATCH_TEST.md).
 
 **Known gaps:**
 - End-of-game: red final-seconds clock is now read (fail-closed), with `scorebug_gone` / `final_screen` fallbacks
