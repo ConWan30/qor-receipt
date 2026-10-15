@@ -26,7 +26,7 @@ nonces (proves the pipeline, not freshness). `qortime agent-fixture DIR` writes 
 End of game: the reader now reads the red final-seconds clock (luma, contrast-stretched: 4:2:0 chroma blurs the
 red channel) under the same glyph gates and flags `clock_red`; a red 0:00 needs 5 agreed reads. If the clock
 never reads 0:00 the agent falls back to `scorebug_gone` (strip absent ≥30 s after a Q4 ≤0:05 read) or
-`final_screen` (hook `AgentCore.final_screen_detector`; no detector ships yet, no real final-screen frames).
+`final_screen` (hook `AgentCore.final_screen_detector`; no detector ships yet, no real final-screen frames). A Jev 1.14 shadow detector logs `jev_final_screen` records through `AgentCore.final_screen_shadow` and never sets the basis (see README).
 The FINAL log line / session-log `final` record carry `final_basis`.
 
 Known live unknowns: pause-menu thresholds/template; a real Q4 end-of-game capture (no 0:00 red frame or final

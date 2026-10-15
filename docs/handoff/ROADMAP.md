@@ -14,6 +14,10 @@
 
 ## 4. Final-screen detector
 - Implement `final_basis = final_screen` (it is only a hook today). Keep it fail-closed.
+- Done: Jev 1.14 shadow detector (`qor_receipt/agent/final_screen_jev.py`, hook `AgentCore.final_screen_shadow`).
+  It logs only and never sets the basis. Next: capture real end-of-game frames and run
+  `scripts/jev_final_screen_smoke.py` on them for recall. Then use `export_labels` shadow labels to build a
+  deterministic local detector for `final_screen_detector`. Jev must not become the basis itself.
 
 ## 5. Meta Global AI Developer Hackathon: AI Referee
 - **Dates:** Oct 26 – Nov 4 2026, virtual, **Indie track**. Application **Pending**. Approvals arrive by **Oct 26, 9 AM ET**.

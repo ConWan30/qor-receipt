@@ -71,10 +71,29 @@ Madden test, of 233 sampled frames 143 were read correctly, 90 were refused, and
 
 **Known gaps:**
 - End-of-game: red final-seconds clock is now read (fail-closed), with `scorebug_gone` / `final_screen` fallbacks
-  and `result.final_basis`. Not yet validated on a real Q4 ending (none captured). Reader eval: `eval/`.
+  and `result.final_basis`. A Jev final-screen detector runs in shadow mode only (see above). Not yet validated on a real Q4 ending (none captured). Reader eval: `eval/`.
 - Halftime challenge and real pause timing are not yet confirmed in a full live match.
 - The referee is in-memory only (no persistence or auth beyond player signatures).
 - Phase 2 items (TPM, transparency log) are not started ([PHASE2](docs/PHASE2.md)). No platform integration.
+
+## Jev final-screen detector (shadow mode)
+
+`qor_receipt/agent/final_screen_jev.py` asks TypeSafe Jev 1.14 (model pinned to `jev-1.14.0`; `jev-latest`
+is still 1.13) one yes/no (Noul) question while the scorebug is absent: *"Is this frame Madden's end-of-game
+final score screen?"*. It runs in a background worker (at most one call per 5 s, 15 s timeout; a busy worker
+or the rate limit drops the frame), resizes frames to the image limits, and treats any error as `unknown`.
+
+**Shadow only.** Results go to the session log as `jev_final_screen` records (model, frame sha256, answer,
+p_yes, confidence, latency). They are wired through `AgentCore.final_screen_shadow`, whose return value is
+ignored, so they never open a `final_screen` span, never set `final_basis`, and never feed the trust tier,
+the score digits, or the signed receipt.
+
+- `QORTIME_JEV_FINAL_SCREEN=shadow|off`. When it is unset: shadow if `TYPESAFE_API_KEY` is set, otherwise off.
+- `export_labels(session_log, out)` turns shadow records into weak labels for a future local detector.
+- Live smoke: `python scripts/jev_final_screen_smoke.py --root /workspace` (needs the key and the eval images).
+  First run (2026-10-14, 13 real negatives: gameplay, absent strip, pause, touchdown, broadcast overlay,
+  halftime report/stats): 0 false yes, p_yes 0.01-0.02, median latency about 200 ms. **No real final screen has
+  been captured yet**, so recall is untested.
 
 ## Credits
 

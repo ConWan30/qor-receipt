@@ -144,6 +144,9 @@ class AgentCore:
         self._absent: dict | None = None   # open "scorebug_absent" obs span (lives inside self.timeline)
         self._screen: dict | None = None   # open "final_screen" obs span
         self.final_screen_detector: Callable[[Any], bool] | None = None  # none shipped yet (no real frames)
+        # Observation-only hook (e.g. Jev shadow detector): called with (image, t_ms) while the scorebug is
+        # absent; its return value is ignored, so it can never open a final_screen span or set the basis.
+        self.final_screen_shadow: Callable[[Any, int], Any] | None = None
         self.stats = {"frames": 0, "size_resets": 0, "hid_events": 0, "checkpoints": 0, "scorebug_reads": 0, "scorebug_ok": 0,
                       "scorebug_agreed": 0, "scorebug_errors": 0, "scorebug_skipped_paused": 0}
 
@@ -290,6 +293,11 @@ class AgentCore:
         self._absent = span(self._absent, "scorebug_absent", absent)
         screen = bool(absent and self.final_screen_detector and self.final_screen_detector(f.image))
         self._screen = span(self._screen, "final_screen", screen)
+        if absent and self.final_screen_shadow is not None:
+            try:
+                self.final_screen_shadow(f.image, f.t_ms)
+            except Exception:  # noqa: BLE001 -- a shadow observer must never disturb capture
+                pass
         if absent:
             self._check_final(f.t_ms)
 
@@ -391,14 +399,20 @@ class AgentCore:
 # ---------------------------------------------------------------- session log
 class SessionLog:
     def __init__(self, path: Path) -> None:
+        import threading
+
         path.parent.mkdir(parents=True, exist_ok=True)
         self.fh = open(path, "a", encoding="utf-8")
+        self._lock = threading.Lock()  # the Jev shadow worker logs from its own thread
 
     def __call__(self, rec: dict) -> None:
-        self.fh.write(json.dumps(rec, separators=(",", ":")) + "\n")
+        with self._lock:
+            if not self.fh.closed:
+                self.fh.write(json.dumps(rec, separators=(",", ":")) + "\n")
 
     def close(self) -> None:
-        self.fh.close()
+        with self._lock:
+            self.fh.close()
 
 
 def load_hid_log(path: str | Path) -> list[dict]:
@@ -492,6 +506,12 @@ def run_live(*, device: str, referee: str, cfg: AgentConfig, out: Path, key, mat
     prompt.show(f"capture {device!r} + {hid.device_name} on USB; referee {referee}")
     client = httpx.Client(base_url=referee.rstrip("/"), timeout=10.0)
     core = AgentCore(client, key, cfg, prompt, log)
+    from .final_screen_jev import from_env as jev_from_env
+
+    jev = jev_from_env(log)  # QORTIME_JEV_FINAL_SCREEN=shadow|off; shadow only with TYPESAFE_API_KEY
+    if jev is not None:
+        core.final_screen_shadow = jev.submit
+        prompt.show(f"Jev final-screen detector: shadow mode ({jev.model}), log only")
     core.start(clock.now_ms(), match_id)
     last_saved = 0
     try:
@@ -514,6 +534,8 @@ def run_live(*, device: str, referee: str, cfg: AgentConfig, out: Path, key, mat
     finally:
         hid.stop()
         cap.close()
+        if jev is not None:
+            jev.close()
         log.close()
     out.write_text(json.dumps(core.receipt, indent=2), encoding="utf-8")
     v = verify_receipt(core.receipt, referee_pub=core.referee_pub)
