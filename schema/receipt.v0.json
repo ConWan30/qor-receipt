@@ -42,8 +42,14 @@
       "properties": {
         "home_score": {"type": "integer", "minimum": 0}, "away_score": {"type": "integer", "minimum": 0},
         "quarter": {"type": "integer", "minimum": 4}, "final_t_ms": {"$ref": "#/$defs/ms"},
-        "winner": {"$ref": "#/$defs/role"}, "method": {"const": "agreed_scorebug_final"},
-        "final_basis": {"enum": ["clock_zero", "scorebug_gone", "final_screen"]}
+        "winner": {"$ref": "#/$defs/role"},
+        "method": {"enum": ["agreed_scorebug_final", "end_menu_read", "last_scorebug_read_unconfirmed"]},
+        "final_basis": {"enum": ["clock_zero", "scorebug_gone", "final_screen", "end_menu"]},
+        "final_confirmed": {"type": "boolean"},
+        "scorebug_last": {"type": "object", "additionalProperties": false, "required": ["home_score", "away_score"],
+                          "properties": {"home_score": {"type": "integer", "minimum": 0}, "away_score": {"type": "integer", "minimum": 0},
+                                         "quarter": {"type": "integer"}, "t_ms": {"$ref": "#/$defs/ms"}}},
+        "notes": {"type": "array", "items": {"type": "string"}}
       }
     },
     "players": {
