@@ -6,6 +6,8 @@
   qor-receipt agent --device "USB3.0 Video" --referee URL  live capture agent (Windows, capture card + DualSense USB)
   qor-receipt agent --replay FRAMES_DIR --hid-log FILE    offline replay through an in-process referee
   qor-receipt agent-fixture OUT_DIR                       write a synthetic replay session
+  qortime referee-ai BUNDLE [--vision scorebug|meta|none] [--no-jev]   AI referee verdict (exit 0 accept, 1 abstain, 2 dispute)
+  qortime referee-ai-verify VERDICT.json [--pub HEX]      check a signed referee verdict
 """
 from __future__ import annotations
 
@@ -45,7 +47,30 @@ def main(argv: list[str] | None = None) -> int:
     g.add_argument("--print-pubkey", action="store_true")
     fx = sub.add_parser("agent-fixture")
     fx.add_argument("out")
+    ra = sub.add_parser("referee-ai", help="AI referee over a QorCap match bundle (signed verdict)")
+    ra.add_argument("bundle", help="QorCap bundle directory (bundle.json, manifest.jsonl, checkpoints.jsonl, ...)")
+    ra.add_argument("--vision", choices=["scorebug", "meta", "none"], default="scorebug",
+                    help="seeing adapter (meta = Muse Spark stub, makes no calls)")
+    ra.add_argument("--no-jev", action="store_true", help="skip the Jev judgment layer")
+    ra.add_argument("--jev-model", default=None, help="Jev model id (default jev-1.14.0)")
+    ra.add_argument("--max-frames", type=int, default=24, help="max evidence frames decoded from the video")
+    ra.add_argument("--referee-pub", help="pin the receipt referee key (default: bundle referee.pub)")
+    ra.add_argument("--key", help="referee-ai signing key file (default ~/.qor-receipt/referee-ai.key)")
+    ra.add_argument("--out", help="verdict path (default BUNDLE/referee_verdict.json)")
+    rv = sub.add_parser("referee-ai-verify")
+    rv.add_argument("verdict")
+    rv.add_argument("--pub")
     a = ap.parse_args(argv)
+    if a.cmd == "referee-ai":
+        return _referee_ai(a)
+    if a.cmd == "referee-ai-verify":
+        from qor_receipt.referee_ai.verdict import verify_verdict
+
+        with open(a.verdict, encoding="utf-8") as fh:
+            v = json.load(fh)
+        errs = verify_verdict(v, pub=a.pub)
+        print(json.dumps({"ok": not errs, "errors": errs, "verdict": v.get("verdict")}))
+        return 2 if errs else 0
     if a.cmd == "agent":
         return _agent(a)
     if a.cmd == "agent-fixture":
@@ -69,6 +94,30 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     print(" ".join(pattern_for(a.nonce)))
     return 0
+
+
+def _referee_ai(a) -> int:
+    from pathlib import Path
+
+    from qor_receipt.keys import FileKey
+    from qor_receipt.referee_ai import verdict as vd
+    from qor_receipt.referee_ai.jev import DEFAULT_MODEL, JevJudge
+    from qor_receipt.referee_ai.referee import referee_bundle
+    from qor_receipt.referee_ai.vision import get_vision
+
+    vision = None if a.vision == "none" else get_vision(a.vision)
+    jev = None if a.no_jev else JevJudge(model=a.jev_model or DEFAULT_MODEL)
+    v = referee_bundle(a.bundle, vision=vision, jev=jev, referee_pub=a.referee_pub, max_frames=a.max_frames)
+    key = FileKey(Path(a.key) if a.key else Path.home() / ".qor-receipt" / "referee-ai.key")
+    v = vd.sign(v, key)
+    out = Path(a.out) if a.out else Path(a.bundle) / vd.FILENAME
+    out.write_text(json.dumps(v, indent=2, sort_keys=True), encoding="utf-8")
+    j = v["judgment"]
+    print(json.dumps({"verdict": v["verdict"], "reasons": v["reasons"], "wrote": str(out),
+                      "integrity_ok": v["integrity"]["ok"], "evidence_frames": len(v["evidence"]),
+                      "jev": {"available": j["available"], "calls": j["calls"], "input_tokens": j["input_tokens"]},
+                      "referee_ai_pub": v["referee_ai"]["pubkey"]}, indent=2))
+    return {vd.ACCEPT: 0, vd.ABSTAIN: 1}.get(v["verdict"], 2)
 
 
 def _agent(a) -> int:

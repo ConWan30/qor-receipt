@@ -120,3 +120,7 @@ Vendored from [ConWan30/Qoresence](https://github.com/ConWan30/Qoresence) (MIT).
 shape, PORT-CERT VERIFIED/PARTIAL/FAIL honesty, clock-notary io ledger) come from
 [ConWan30/QorTroller](https://github.com/ConWan30/QorTroller) at pinned commit `51d1ab3`. It's referenced, not depended on.
 MIT licensed.
+
+## AI referee
+
+`qortime referee-ai <qorcap-bundle>` writes a signed accept / dispute / abstain verdict. It checks integrity in code, reads frames with the scorebug reader (a Meta Muse Spark stub is ready to wire up), and uses TypeSafe Jev to judge frames. See [docs/REFEREE_AI.md](docs/REFEREE_AI.md).
