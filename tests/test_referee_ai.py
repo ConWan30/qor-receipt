@@ -201,3 +201,17 @@ def test_real_qorcap_bundle_integrity():
     r = integ.verify_bundle(REAL)
     assert r["ok"], r["errors"]
     assert r["info"]["receipt_verify"]["status"] in ("VERIFIED", "PARTIAL")
+
+
+def test_check_final_end_menu_read_allows_one_final_play_past_scorebug():
+    last = {"away": 0, "home": 17}
+    # Madden match-20261016-143212: scorebug last read 0-17, end-of-game menu 0-20 (final-play FG).
+    assert integ.check_final({"away": 0, "home": 20}, last) != []                      # scorebug methods: strict
+    assert integ.check_final({"away": 0, "home": 20}, last, method="end_menu_read") == []
+    assert integ.check_final({"away": 0, "home": 17}, last, method="end_menu_read") == []
+    assert integ.check_final({"away": 0, "home": 14}, last, method="end_menu_read")    # never backwards
+    assert integ.check_final({"away": 3, "home": 20}, last, method="end_menu_read")    # both sides moved
+    assert integ.check_final({"away": 0, "home": 30}, last, method="end_menu_read")    # not one play
+    assert integ.final_method({"basis": "end_menu"}) == "end_menu_read"
+    assert integ.final_method({"method": "end_menu_read", "final_basis": "end_menu"}) == "end_menu_read"
+    assert integ.final_method({"basis": "clock_zero"}) is None

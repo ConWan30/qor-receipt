@@ -7,7 +7,10 @@
   draft-receipt hash, and the signed ``receipt.json`` via ``verify_receipt`` pinned to ``referee.pub``.
 * ``check_progression``: scores only move by legal football steps, never backwards; quarters never go
   backwards; the clock never runs backwards within a quarter.
-* ``check_final``: the final screen / claimed result must equal the last scorebug score.
+* ``check_final``: the final screen / claimed result must equal the last scorebug score, except an
+  ``end_menu_read`` final (QorCap reads Madden's end-of-game menu, the authoritative final frame): that may
+  exceed the last scorebug read by ONE legal scoring step on one side (the final play's score is often never
+  drawn on the scorebug before it disappears), never less.
 """
 from __future__ import annotations
 
@@ -180,9 +183,29 @@ def check_progression(states: list[dict[str, Any]]) -> list[str]:
     return errs
 
 
-def check_final(final: dict[str, Any] | None, last_state: dict[str, Any] | None, *, what: str = "final") -> list[str]:
+END_MENU_METHODS = {"end_menu_read", "end_menu"}
+
+
+def check_final(final: dict[str, Any] | None, last_state: dict[str, Any] | None, *, what: str = "final",
+                method: str | None = None) -> list[str]:
     if not final or not last_state or last_state.get("away") is None:
         return []
-    if (final.get("away"), final.get("home")) != (last_state.get("away"), last_state.get("home")):
-        return [f"{what} {final.get('away')}-{final.get('home')} != last scorebug score {last_state.get('away')}-{last_state.get('home')}"]
-    return []
+    f = (final.get("away"), final.get("home"))
+    l_ = (last_state.get("away"), last_state.get("home"))
+    if f == l_:
+        return []
+    if method in END_MENU_METHODS and all(isinstance(x, int) for x in f + l_):
+        d = [f[0] - l_[0], f[1] - l_[1]]
+        if min(d) >= 0 and sorted(d)[0] == 0 and max(d) in LEGAL_STEPS:
+            return []  # final play scored after the scorebug's last read; end menu is authoritative
+        return [f"{what} {f[0]}-{f[1]} (end menu) is not one legal scoring play past last scorebug score {l_[0]}-{l_[1]}"]
+    return [f"{what} {f[0]}-{f[1]} != last scorebug score {l_[0]}-{l_[1]}"]
+
+
+def final_method(final: dict[str, Any] | None) -> str | None:
+    """``end_menu_read`` when a final (bundle.json final or receipt result) came from the end-of-game menu."""
+    if not final:
+        return None
+    if final.get("method") in END_MENU_METHODS or final.get("basis") == "end_menu" or final.get("final_basis") == "end_menu":
+        return "end_menu_read"
+    return final.get("method")

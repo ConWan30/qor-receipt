@@ -181,12 +181,12 @@ def referee_bundle(d: str | Path, *, vision=None, jev: JevJudge | None = None, r
     errors += integ.check_progression(tl_states)
     final = bundle.get("final")
     last = (cp_states or tl_states or [None])[-1]
-    errors += integ.check_final(final, last, what="bundle.json final")
+    errors += integ.check_final(final, last, what="bundle.json final", method=integ.final_method(final))
     rec = iv.get("receipt") or {}
     claim = None
     if rec.get("result"):
         claim = {"away": rec["result"]["away_score"], "home": rec["result"]["home_score"]}
-        errors += integ.check_final(claim, last, what="receipt.json result")
+        errors += integ.check_final(claim, last, what="receipt.json result", method=integ.final_method(rec["result"]))
     elif final:
         claim = {"away": final.get("away"), "home": final.get("home")}
     frames = sample_bundle_frames(d, bundle, tl_scores, max_frames=max_frames) if (vision or jev) else []
