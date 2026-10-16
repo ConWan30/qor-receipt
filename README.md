@@ -1,5 +1,13 @@
 # QorTime
 
+**One app. One recording. One receipt.**
+
+- **Capture.** [QorCap](https://github.com/ConWan30/qorcap) is the single lightweight Windows app you run during the match. It records the capture card and fingerprints the video (a hash chain plus timestamped checkpoints). Logging controller button presses from the same session is **coming in v0.3**.
+- **Prove.** After the match, QorTime works on the finished recording, not during play. It produces the signed receipt, then the [AI referee](docs/REFEREE_AI.md) (`qortime referee-ai <bundle>`) signs an **accept / dispute / abstain** verdict with plain reasons and evidence frames.
+- **Share.** Anyone can check the receipt in the [browser verifier](https://conwan30.github.io/qortime/verify/) or with `qortime verify`, and the referee verdict with `qortime referee-ai-verify`.
+
+Honest limit: QorTime proves the footage's integrity and timing (and, from v0.3, the controller inputs). It does not prove who held the controller.
+
 **Signed, verified match-result receipts for console money-match / escrow platforms**
 (Locked, TrustBridge, ArcadeBet, Wagr, and others). First title: **Madden 27 on PS5**.
 

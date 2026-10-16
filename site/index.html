@@ -1,16 +1,16 @@
 <!doctype html>
 <html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>QorTime — the final whistle, sealed</title>
-<meta name="description" content="QorTime turns a console match result into a signed, timestamped receipt anyone can verify in the browser. Madden NFL 27 supported first.">
+<title>QorTime — One app. One recording. One receipt.</title>
+<meta name="description" content="One app. One recording. One receipt. QorCap captures and fingerprints your console match on Windows; QorTime then signs the receipt, runs an AI referee and lets anyone verify it. Madden NFL 27 first.">
 <meta name="theme-color" content="#04050a"><meta name="color-scheme" content="dark">
 <link rel="icon" type="image/svg+xml" href="assets/favicon.svg"><link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png"><link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
 <link rel="canonical" href="https://conwan30.github.io/qortime/">
-<meta property="og:type" content="website"><meta property="og:title" content="QorTime — the final whistle, sealed">
-<meta property="og:description" content="Signed, verifiable console match results. Capture → challenge → co-sign → seal → verify.">
+<meta property="og:type" content="website"><meta property="og:title" content="QorTime — One app. One recording. One receipt.">
+<meta property="og:description" content="Capture with QorCap, prove it after the match, share a receipt anyone can verify. One app. One recording. One receipt.">
 <meta property="og:url" content="https://conwan30.github.io/qortime/"><meta property="og:image" content="https://conwan30.github.io/qortime/assets/og.png">
 <meta name="twitter:card" content="summary_large_image"><meta name="twitter:image" content="https://conwan30.github.io/qortime/assets/og.png">
-<meta name="twitter:title" content="QorTime — the final whistle, sealed">
+<meta name="twitter:title" content="QorTime — One app. One recording. One receipt.">
 <meta name="twitter:description" content="Signed, verifiable console match results. Verified Match is early access and Stripe test mode until KYC — not a live paid product.">
 <meta name="twitter:site" content="@QorTimeHQ">
 <script type="application/ld+json">
@@ -23,21 +23,41 @@
 <div class="grain" aria-hidden="true"></div>
 <div class="cursor" aria-hidden="true"></div>
 <header class="nav glass"><a class="brand" href="./"><img src="assets/logo.svg" alt="" width="30" height="30"><b>Qor<span>Time</span></b></a>
-<nav><a href="#capture">Capture</a><a href="#challenge">Challenge</a><a href="how-it-works/" class="keep">How it works</a><a href="pricing/" class="keep">Pricing</a><a href="early-access/" class="keep">Early access</a><a href="verify/" class="btn sm mag">Verifier</a></nav></header>
+<nav><a href="#flow">Capture · Prove · Share</a><a href="how-it-works/" class="keep">How it works</a><a href="pricing/" class="keep">Pricing</a><a href="early-access/" class="keep">Early access</a><a href="verify/" class="btn sm mag">Verifier</a></nav></header>
 <main>
 
 <section class="hero" id="top">
  <div class="hero-gl" aria-hidden="true"><canvas id="gl"></canvas><img class="gl-fallback" src="assets/a-sealclock.svg" alt=""></div>
  <div class="hero-copy">
-  <p class="kicker reveal-up"><span class="dot"></span> signed console match results · Madden NFL 27 first</p>
-  <h1 class="kinetic"><span class="line">The final</span><span class="line">whistle,</span><span class="line accent">sealed.</span></h1>
-  <p class="lede reveal-up">QorTime reads the final score off the screen, proves a real human is on the DualSense, and seals the moment in an Ed25519 receipt a referee co-signs. Anyone can verify it in a browser.</p>
+  <p class="kicker reveal-up"><span class="dot"></span> capture · prove · share · Madden NFL 27 first</p>
+  <h1 class="kinetic"><span class="line">One app.</span><span class="line">One recording.</span><span class="line accent">One receipt.</span></h1>
+  <p class="lede reveal-up">Play your match with <b>QorCap</b>, one lightweight Windows app that records the capture card and fingerprints every second of video. When the match is over, QorTime does the heavy lifting on the finished recording: a signed receipt, an AI referee verdict, and a public verify link. Nothing heavy runs while you play.</p>
   <div class="ctas reveal-up"><a class="btn mag" href="verify/"><span>Verify a receipt</span></a><a class="btn ghost mag" href="early-access/"><span>Verified Match — early access</span></a></div>
   <div class="ctas reveal-up vm-hero"><a class="btn vm mag" href="https://buy.stripe.com/test_3cI4gy7he9Uuarqczl00000" target="_blank" rel="noopener noreferrer"><span>Buy Verified Match (test)</span></a></div>
   <p class="vm-hero-note reveal-up">Stripe test mode · $9.99 USD · not a live charge · early access until KYC</p>
  </div>
  <div class="hero-foot reveal-up"><span>scroll to seal a match</span><i></i></div>
- <div class="marquee" aria-hidden="true"><div class="mq-track"><span>CAPTURE ◆ CHALLENGE ◆ CO-SIGN ◆ SEAL ◆ VERIFY ◆ </span><span>CAPTURE ◆ CHALLENGE ◆ CO-SIGN ◆ SEAL ◆ VERIFY ◆ </span></div></div>
+ <div class="marquee" aria-hidden="true"><div class="mq-track"><span>ONE APP ◆ ONE RECORDING ◆ ONE RECEIPT ◆ CAPTURE ◆ PROVE ◆ SHARE ◆ </span><span>ONE APP ◆ ONE RECORDING ◆ ONE RECEIPT ◆ CAPTURE ◆ PROVE ◆ SHARE ◆ </span></div></div>
+</section>
+
+
+<section class="wrap" id="flow">
+ <p class="num">how it works</p>
+ <h2 class="split big">Capture. Prove. Share.</h2>
+ <div class="cards">
+  <div class="card glass"><h3>1 · Capture</h3><p><b>QorCap</b> is the one app you run, on Windows, during the match. It records the capture card and fingerprints the video as it is written: every segment is hashed and chained, with timestamped checkpoints. It stays light, so it doesn't strain your laptop.</p><span class="tag">controller button log in the same session · coming in v0.3</span></div>
+  <div class="card glass"><h3>2 · Prove</h3><p>After the final whistle, QorTime works on the finished recording. It re-checks the fingerprints, reads the score, and seals a signed receipt. The <b>AI referee</b> reviews the evidence and signs a verdict: <b>accept</b>, <b>dispute</b>, or <b>abstain</b>, with plain reasons and the evidence frames.</p></div>
+  <div class="card glass"><h3>3 · Share</h3><p>Send the receipt to your opponent, a tournament, or a platform. Anyone can check it in the free <a href="verify/">browser verifier</a>, and nothing is uploaded. A hosted referee countersign, Verified Match, is in test-mode early access.</p></div>
+ </div>
+ <div class="glass limits" style="margin-top:22px">
+  <h2>Inside the Prove step</h2>
+  <ul>
+   <li><b>Integrity checks in code:</b> video fingerprints, checkpoint chain, and signatures. Scores can only move in legal football steps, never backwards. The clock only runs down within a quarter. The final screen must match the last score.</li>
+   <li><b>AI referee:</b> reads frames to confirm the score. It only accepts a reading when it is confident and the reading agrees across several frames, and it <b>abstains</b> rather than guessing. Tampering is caught by the integrity checks, not by trusting a model.</li>
+   <li><b>Honest limit:</b> QorTime proves the footage's integrity and timing (and, coming in v0.3, the controller inputs from the same session). It does <b>not</b> prove who held the controller.</li>
+  </ul>
+  <a class="btn ghost mag" href="how-it-works/"><span>How it works</span></a>
+ </div>
 </section>
 
 <!-- 01 capture -->
@@ -46,7 +66,7 @@
   <div class="scene-copy">
    <p class="num">01 / capture</p>
    <h2 class="split">The scorebug, read off the screen.</h2>
-   <p>The agent on the player's PC reads the final score from the capture card, digit by digit, and only locks when consecutive frames agree.</p>
+   <p>QorTime's scorebug reader reads the final score from the recording, digit by digit, and only locks when consecutive frames agree.</p>
    <ul class="ticks"><li>frames read from the capture card</li><li>score locked on frame agreement</li><li>Madden NFL 27 first, more titles <span class="tag">roadmap</span></li></ul>
   </div>
   <div class="scene-art">
@@ -72,7 +92,7 @@
   <div class="scene-copy">
    <p class="num">02 / challenge</p>
    <h2 class="split">Prove a human is on the sticks.</h2>
-   <p>At random moments the referee sends a nonce. The player pauses and enters the pattern. It must appear in the DualSense input log <em>and</em> on video within 600&nbsp;ms. Bots and replays don't get a second try.</p>
+   <p>At random moments the referee sends a nonce. The player pauses and enters the pattern, which must show up in the controller input log <em>and</em> on video within 600&nbsp;ms. Bots and replays don't get a second try.</p><p class="note">Today this runs with the QorTime agent rig. Controller-input logging inside QorCap is <b>coming in v0.3</b>.</p>
   </div>
   <div class="scene-art">
    <div class="pad-wrap glass">
@@ -169,7 +189,7 @@ receipt_hash</pre>
 
 <section class="wrap" id="limits">
  <div class="glass limits"><h2>Honest limits</h2>
- <p>A VERIFIED receipt says the score on the screen was read by an agent with a live human on that controller at those times. It does <b>not</b> prove:</p>
+ <p>QorTime proves the footage's integrity and timing. Controller inputs from the same session are <span class="tag">coming in v0.3</span> in QorCap. It does <b>not</b> prove:</p>
  <ul><li><b>Account sharing:</b> who is physically holding the controller.</li><li><b>Collusion:</b> both players agreeing to throw or fake a match.</li><li>Anything outside what the capture card saw.</li></ul>
  <a class="btn ghost mag" href="https://github.com/ConWan30/qortime/blob/main/docs/RISKS.md"><span>Read RISKS.md</span></a></div>
 </section>
