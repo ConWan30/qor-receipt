@@ -54,7 +54,7 @@ h1 .accent .ch{background:inherit;-webkit-background-clip:text;background-clip:t
 /* scenes */
 .scene{position:relative}
 .pin{min-height:100vh;min-height:100svh;display:grid;grid-template-columns:1fr 1.15fr;align-items:center;gap:64px;padding:110px max(24px,calc((100vw - 1180px)/2)) 60px}
-.scene-copy h2,#platforms h2,.cta h2,.limits h2{font:900 clamp(42px,5.4vw,84px)/.9 var(--disp);text-transform:uppercase;margin:12px 0 20px}
+.scene-copy h2,#platforms h2,#flow h2,.cta h2,.limits h2{font:900 clamp(42px,5.4vw,84px)/.9 var(--disp);text-transform:uppercase;margin:12px 0 20px}
 .scene-copy p{color:#b9c1d6;font-size:17px;max-width:480px}
 .scene-copy p+p{margin-top:12px}
 .num{font:600 13px var(--mono);letter-spacing:.2em;text-transform:uppercase;color:var(--pk)}
@@ -205,3 +205,6 @@ body.page{background:radial-gradient(880px 520px at 92% -8%,rgba(228,197,109,.16
  .page{padding-top:128px}
  .page-hero,.page-body{width:min(1100px,calc(100% - 32px))}
 }
+/* "One app. One recording. One receipt." keep each line whole */
+.hero h1.kinetic{font-size:clamp(44px,7.4vw,128px)}
+.hero h1.kinetic .line{white-space:nowrap}

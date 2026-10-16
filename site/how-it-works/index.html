@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>How QorTime works — capture, challenge, co-sign, verify</title>
+<title>How it works — Capture, Prove, Share · QorTime</title>
 <meta name="description" content="How QorTime seals a Madden match: read the scorebug, prove a human is on the DualSense, countersign the clock, and verify the receipt in the browser.">
 <meta name="theme-color" content="#04050a"><meta name="color-scheme" content="dark">
 <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg">
@@ -25,15 +25,14 @@
 <nav><a href="./" class="keep" aria-current="page">How it works</a><a href="../pricing/" class="keep">Pricing</a><a href="../early-access/" class="keep">Early access</a><a href="../verify/" class="btn sm mag">Verifier</a></nav></header>
 <main>
 <section class="page-hero">
- <p class="kicker"><span class="dot"></span> madden match receipt · shareable path</p>
- <h1>Five beats.<br><span class="accent">One receipt.</span></h1>
- <p class="lede">QorTime turns the end of a console match into a signed JSON receipt. The free verifier checks it in your browser. A hosted referee countersign — Verified Match — is early access and Stripe test mode until KYC.</p>
+ <p class="kicker"><span class="dot"></span> qorcap captures · qortime proves · anyone verifies</p>
+ <h1>One app.<br>One recording.<br><span class="accent">One receipt.</span></h1>
+ <p class="lede">QorCap is the single lightweight Windows app you run during the match. Everything heavy happens afterwards on the finished recording: the signed receipt, the AI referee verdict, and public verify. A hosted referee countersign, Verified Match, is early access and Stripe test mode until KYC.</p>
  <nav class="page-nav" aria-label="On this page">
   <a href="#capture">01 Capture</a>
-  <a href="#challenge">02 Challenge</a>
-  <a href="#chain">03 Co-sign</a>
-  <a href="#seal">04 Seal</a>
-  <a href="#verify">05 Verify</a>
+  <a href="#prove">02 Prove</a>
+  <a href="#share">03 Share</a>
+  <a href="#limits">Honest limit</a>
  </nav>
 </section>
 <section class="page-body">
@@ -41,40 +40,25 @@
   <li class="step glass" id="capture">
    <span class="n">01</span>
    <div>
-    <h2>Capture</h2>
-    <p>The agent on the player’s PC reads the Madden scorebug off the capture card, digit by digit, and locks a score only when consecutive frames agree. The on-site scorebug is an illustration, not a league mark.</p>
-    <p class="fine"><a href="../#capture">See it on the homepage</a></p>
+    <h2>Capture, with QorCap</h2>
+    <p>Run QorCap on the Windows PC with your capture card. It records the match and fingerprints the video as it is written. Each segment is SHA-256 hashed into a chain, and timestamped checkpoints commit to the score state, so cutting or editing the file afterwards shows up. It is built to stay light during play.</p>
+    <p class="fine">Controller button presses logged from the same session: <b>coming in v0.3</b>.</p>
    </div>
   </li>
-  <li class="step glass" id="challenge">
+  <li class="step glass" id="prove">
    <span class="n">02</span>
    <div>
-    <h2>Challenge</h2>
-    <p>The referee sends a nonce. The player pauses and enters OPTIONS plus four buttons. That pattern has to show up in the DualSense HID log and on video within 600&nbsp;ms. A replay does not get a second pattern from the past.</p>
-    <p class="fine"><a href="../#challenge">See it on the homepage</a></p>
+    <h2>Prove, after the match</h2>
+    <p>Once the recording is finished, QorTime re-verifies every fingerprint, reads the final score, and seals a signed Ed25519 receipt. The <b>AI referee</b> then reviews the bundle and signs its own verdict: <b>accept</b>, <b>dispute</b>, or <b>abstain</b>. Each verdict comes with plain reasons and the evidence frames it looked at.</p>
+    <p>The referee checks three things. First, integrity in code: fingerprints, signatures, legal scoring steps, a clock that only runs down, and a final screen that matches the last score. Second, it reads the scorebug. Third, it makes an AI judgment. It accepts a reading only when it is confident and the reading agrees across several frames, and otherwise it abstains. Doctored frames are caught by the integrity rules, not by trusting a model.</p>
+    <p class="fine"><a href="https://github.com/ConWan30/qortime/blob/main/docs/REFEREE_AI.md">AI referee details</a></p>
    </div>
   </li>
-  <li class="step glass" id="chain">
+  <li class="step glass" id="share">
    <span class="n">03</span>
    <div>
-    <h2>Co-sign</h2>
-    <p>About every four seconds the agent sends a rolling hash of frames and inputs. The referee timestamps and countersigns each checkpoint. A receipt written after the match cannot carry those earlier signatures.</p>
-    <p class="fine"><a href="../#chain">See it on the homepage</a></p>
-   </div>
-  </li>
-  <li class="step glass" id="seal">
-   <span class="n">04</span>
-   <div>
-    <h2>Seal</h2>
-    <p>At the final whistle each running agent signs the result and the referee seals it. If both players run agents and their timelines agree, the trust tier is dual-attested. One agent is single-attested.</p>
-    <p class="fine"><a href="../#receipt">See it on the homepage</a></p>
-   </div>
-  </li>
-  <li class="step glass" id="verify">
-   <span class="n">05</span>
-   <div>
-    <h2>Verify</h2>
-    <p>Paste the JSON into the verifier. It checks signatures, the checkpoint chain, and the challenges locally. The verdict is VERIFIED, PARTIAL, or FAIL. The receipt file is not uploaded for that check.</p>
+    <h2>Share, and let anyone verify</h2>
+    <p>Hand the receipt to your opponent, a tournament, or a platform. The free verifier checks signatures and the checkpoint chain locally in the browser. The verdict is VERIFIED, PARTIAL, or FAIL, and the file is not uploaded. Referee verdicts verify with <code>qortime referee-ai-verify</code>.</p>
     <p class="fine"><a href="../verify/">Open the verifier</a> · <a href="../verify/sample-receipt.json">demo receipt JSON</a></p>
    </div>
   </li>
@@ -87,8 +71,9 @@
    </div>
   </li>
  </ol>
- <div class="glass limits" style="margin:18px 0 48px">
-  <h2>What a receipt does not prove</h2>
+ <div class="glass limits" id="limits" style="margin:18px 0 48px">
+  <h2>The honest limit</h2>
+  <p>QorTime proves the footage's integrity and timing, and (coming in v0.3) the controller inputs from the same session. It does <b>not</b> prove who held the controller.</p>
   <ul>
    <li><b>Account sharing.</b> Who is physically holding the controller.</li>
    <li><b>Collusion.</b> Both players agreeing to throw or fake a match.</li>
