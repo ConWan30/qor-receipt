@@ -8,6 +8,7 @@
   qor-receipt agent-fixture OUT_DIR                       write a synthetic replay session
   qortime referee-ai BUNDLE [--vision scorebug|meta|none] [--no-jev]   AI referee verdict (exit 0 accept, 1 abstain, 2 dispute)
   qortime referee-ai-verify VERDICT.json [--pub HEX]      check a signed referee verdict
+  qortime index BUNDLE [--video V] [--out DIR]            play-by-play match index + burst frames + viewer.html
 """
 from __future__ import annotations
 
@@ -60,7 +61,22 @@ def main(argv: list[str] | None = None) -> int:
     rv = sub.add_parser("referee-ai-verify")
     rv.add_argument("verdict")
     rv.add_argument("--pub")
+    ix = sub.add_parser("index", help="play-by-play match index, burst frames, 'what the AI saw' viewer")
+    ix.add_argument("bundle", help="QorCap bundle dir, bundle-meta.zip, or a dir holding bundle-meta.zip")
+    ix.add_argument("--video", help="match video (full recording or a tail clip)")
+    ix.add_argument("--video-tail", choices=["auto", "yes", "no"], default="auto", help="video is the END of the recording")
+    ix.add_argument("--out", default="qt-index", help="output dir")
+    ix.add_argument("--no-frames", action="store_true")
+    ix.add_argument("--force", action="store_true", help="ignore cached match_index.json")
     a = ap.parse_args(argv)
+    if a.cmd == "index":
+        from qor_receipt.match_index import build_index
+
+        idx = build_index(a.bundle, a.out, video=a.video, video_tail={"auto": None, "yes": True, "no": False}[a.video_tail],
+                          frames=not a.no_frames, force=a.force)
+        print(json.dumps({"out": a.out, "events": [(e["id"], e.get("score_after"), e["confidence"]) for e in idx["events"]],
+                          "missing": idx["missing"]}))
+        return 0
     if a.cmd == "referee-ai":
         return _referee_ai(a)
     if a.cmd == "referee-ai-verify":

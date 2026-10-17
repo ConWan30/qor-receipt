@@ -132,3 +132,11 @@ MIT licensed.
 ## AI referee
 
 `qortime referee-ai <qorcap-bundle>` writes a signed accept / dispute / abstain verdict. It checks integrity in code, reads frames with the scorebug reader (a Meta Muse Spark stub is ready to wire up), and uses TypeSafe Jev to judge frames. See [docs/REFEREE_AI.md](docs/REFEREE_AI.md).
+
+## Match index ("what the AI saw")
+
+`qortime index BUNDLE --video match.mp4 --out qt-index/` writes `match_index.json` (kickoff, quarter changes, every
+score change with before/after score, end of game; each with nearby button presses/haptics, the checkpoints and
+clip hash that bind it to the video chain, and a heuristic confidence), ~10 burst frames + a contact sheet per event,
+and a self-contained `viewer.html`. Inputs/haptics are advisory evidence, not proof; fields the bundle does not carry
+are shown as missing. Tail clips (e.g. `last150s.mp4`) are aligned to the end of the recording.
