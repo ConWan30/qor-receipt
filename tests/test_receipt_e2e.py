@@ -427,8 +427,8 @@ def test_challenge_ok_without_evidence_is_partial():
 
 
 def test_input_proof_advisory_signals():
-    from qor_receipt.receipt import _input_proof_advisory, verify_receipt
     from qor_receipt.demo import demo_receipt
+    from qor_receipt.receipt import _input_proof_advisory, verify_receipt
 
     assert _input_proof_advisory({}) is None
     assert _input_proof_advisory({"motion_permille": {"home": 1}}) is None
