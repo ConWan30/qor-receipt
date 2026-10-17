@@ -1,0 +1,105 @@
+import json
+import shutil
+import subprocess
+import zipfile
+
+import pytest
+
+from qor_receipt.jcs import sha256_hex
+from qor_receipt.match_index import build_index
+from qor_receipt.match_index.build import bitnames, detect_events
+
+W0 = 1_800_000_000_000
+
+
+def _read(t, a, h, q=1, c=100):
+    return {"t_ms": W0 + t, "away": a, "home": h, "quarter": q, "clock_s": c, "clock_red": False}
+
+
+def _bundle(d, final=None):
+    d.mkdir(parents=True, exist_ok=True)
+    tl = [_read(i * 1000, 0, 0) for i in range(5)] + [_read(5000, 0, 9)]  # one-read flicker, must be ignored
+    tl += [_read(i * 1000, 0, 0) for i in range(6, 10)] + [_read(i * 1000, 0, 7) for i in range(10, 20)]
+    tl += [_read(i * 1000, 0, 7, q=2) for i in range(20, 25)] + [{"obs": "scorebug_absent", "n": 3, "t_ms": W0 + 25000, "until_ms": W0 + 28000}]
+    (d / "timeline.jsonl").write_text("\n".join(json.dumps(x) for x in tl))
+    cps = []
+    for i in range(0, 30, 2):
+        q = {"trigger": "segment", "segment_seq": i, "segment_hash": "ab" * 32, "chain_head": "cd" * 32, "score": None}
+        if i == 10:
+            q.update(trigger="score_change", score={"away": 0, "home": 7, "quarter": 1})
+        cps.append({"seq": len(cps), "t_ms": W0 + i * 1000 + 100, "hash": f"{i:064x}", "prev": "0" * 64, "frames_hash": sha256_hex(q), "qorcap": q})
+    (d / "checkpoints.jsonl").write_text("\n".join(json.dumps(x) for x in cps))
+    man = [{"type": "segment", "seq": i, "mono_ms": i * 1000, "wall_ms": W0 + i * 1000, "frames": i * 30} for i in range(31)]
+    (d / "manifest.jsonl").write_text("\n".join(json.dumps(x) for x in man))
+    ins = [{"type": "header", "wall_anchor_ms": W0, "t_us": 0}]
+    ins += [{"type": "in", "t_us": t * 1000, "b": b} for t, b in [(9000, 0), (9500, 1), (9600, 1), (9700, 0), (9800, 1 << 12)]]
+    (d / "inputs.jsonl").write_text("\n".join(json.dumps(x) for x in ins))
+    (d / "haptics.jsonl").write_text(json.dumps({"type": "haptic", "t_wall_ms": W0 + 10200, "energy": 500, "duration_ms": 90, "confidence": 800}))
+    (d / "bundle.json").write_text(json.dumps({"schema": "qorcap-bundle/v0", "match_id": "t1", "final": final, "final_confirmed": bool(final),
+                                               "chain_head": "cd" * 32, "clips": [{"name": "score-a0-h7-q1", "sha256": "ee" * 32}]}))
+    (d / "receipt.json").write_text(json.dumps({"result": {"away_score": 0, "home_score": 7, "final_confirmed": False,
+                                                           "method": "last_scorebug_read_unconfirmed", "final_t_ms": W0 + 29000}}))
+    return d
+
+
+def test_events_flicker_binding_inputs(tmp_path):
+    idx = build_index(_bundle(tmp_path / "b"), tmp_path / "o", frames=False)
+    kinds = [e["kind"] for e in idx["events"]]
+    assert kinds == ["kickoff", "score_change", "quarter_change", "end_of_game"]
+    sc = idx["events"][1]
+    assert sc["score_before"] == {"away": 0, "home": 0} and sc["score_after"] == {"away": 0, "home": 7}
+    assert sc["t_ms"] == W0 + 10000 and sc["legal_step"] and sc["locked"]
+    b = sc["checkpoints"]
+    assert b["trigger_match"]["seq"] == 5 and b["trigger_match"]["frames_hash_matches_evidence"] is True
+    assert b["clip"]["name"] == "score-a0-h7-q1" and b["before"]["t_ms"] <= sc["t_ms"] <= b["after"]["t_ms"]
+    pr = sc["inputs"]["presses"]
+    assert [p["buttons"] for p in pr] == [["CROSS"], ["UP"]] and pr[0]["dt_ms"] == -500
+    assert sc["inputs"]["haptics"][0]["dt_ms"] == 200 and "Advisory" in sc["inputs"]["advisory"]
+    assert sc["recording_s"] == 10.0 and sc["frames"] == [] and sc["frames_missing_reason"] == "no video supplied"
+    end = idx["events"][-1]
+    assert end["score_after"] is None and end["final_confirmed"] is False and not end["locked"]
+    assert "bundle.final (end-of-game menu read)" in idx["missing"]
+    html = (tmp_path / "o" / "viewer.html").read_text()
+    assert "advisory" in html and "missing" in html and '"match_id": "t1"' in html
+
+
+def test_tampered_checkpoint_never_locks(tmp_path):
+    d = _bundle(tmp_path / "b")
+    rows = [json.loads(x) for x in (d / "checkpoints.jsonl").read_text().splitlines()]
+    rows[5]["qorcap"]["score"]["home"] = 7  # unchanged score but forge frames_hash
+    rows[5]["frames_hash"] = "00" * 32
+    (d / "checkpoints.jsonl").write_text("\n".join(json.dumps(x) for x in rows))
+    sc = build_index(d, tmp_path / "o", frames=False)["events"][1]
+    assert sc["checkpoints"]["trigger_match"]["frames_hash_matches_evidence"] is False and not sc["locked"]
+
+
+def test_final_and_zip_and_cache(tmp_path):
+    d = _bundle(tmp_path / "b", final={"away": 0, "home": 10})
+    z = tmp_path / "bundle-meta.zip"
+    with zipfile.ZipFile(z, "w") as zf:
+        for p in d.iterdir():
+            zf.write(p, p.name)
+    idx = build_index(z, tmp_path / "o", frames=False)
+    end = idx["events"][-1]
+    assert end["score_after"] == {"away": 0, "home": 10} and end["final_confirmed"] and end["locked"]
+    assert build_index(z, tmp_path / "o", frames=False)["cache_key"] == idx["cache_key"]
+
+
+def test_illegal_step_low_confidence():
+    tl = [_read(i * 1000, 0, 0) for i in range(5)] + [_read(i * 1000, 0, 5) for i in range(5, 9)]
+    ev = detect_events(tl, None, None, False)
+    sc = [e for e in ev if e["kind"] == "score_change"][0]
+    assert sc["legal_step"] is False and sc["confidence"] < 0.85
+    assert bitnames(1 | 1 << 9) == ["CROSS", "OPTIONS"]
+
+
+@pytest.mark.skipif(not shutil.which("ffmpeg"), reason="ffmpeg not installed")
+def test_burst_frames_from_video(tmp_path):
+    v = tmp_path / "v.mp4"
+    subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-f", "lavfi", "-i", "testsrc=size=320x180:rate=30:duration=30",
+                    "-pix_fmt", "yuv420p", str(v)], check=True)
+    idx = build_index(_bundle(tmp_path / "b"), tmp_path / "o", video=v)
+    sc = idx["events"][1]
+    assert len(sc["frames"]) == 10 and all(f["ok"] for f in sc["frames"]) and sc["contact_sheet"]
+    assert sc["frames"][0]["dt_s"] == -3.0 and sc["frames"][-1]["dt_s"] == 2.0
+    assert "data:image/jpeg;base64," in (tmp_path / "o" / "viewer.html").read_text()
