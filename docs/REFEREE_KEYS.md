@@ -71,7 +71,7 @@ python scripts/referee_keys.py revoke --root … --serial N --reason "compromise
   - `GET /v1/log/head` returns the signed head `{size, head, ts_ms, pubkey, key_id, delegation_serial, sig}`.
   - `GET /v1/log?start=&limit=` returns a range of entries.
   - `GET /v1/log/inclusion/{body_sha256}` returns the entries from the receipt up to the head, plus the signed head.
-- **Anchoring.** The `.github/workflows/anchor-log.yml` workflow runs every 6 h. It runs `scripts/translog.py anchor`,
+- **Anchoring.** A 6-hourly workflow (template `transparency/anchor-log.workflow.yml`; copy it to `.github/workflows/` — the bot token lacks the GitHub `workflow` scope, so it is not installed yet; until then anchors are run from the operator box) runs it. It runs `scripts/translog.py anchor`,
   which checks four things: the head signature, that the signer's delegation is valid, continuity with the last anchored
   head (the old head must still be in the log at the same position), and the chain. It then commits
   `transparency/anchors.jsonl`. A rewound or rewritten log makes the job fail, and nothing is committed.
