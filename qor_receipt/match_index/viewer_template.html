@@ -311,12 +311,12 @@ function cp(c,l){if(!c)return `<div class="cp"><div class="h"><b>${l}</b>${M}</d
  <div class="kv" style="margin-top:4px"><b>hash</b><span class="mono hx" data-x="${esc(c.hash??'')}"></span><b>frames_hash</b><span><span class="mono hx" data-x="${esc(c.frames_hash??'')}"></span><br>${fm}</span><b>segment</b><span class="mono">#${v(c.segment_seq)}</span></div></div>`}
 function side(e){const after=e.score_after,gold=e.locked===true;const s=$('#score');
  const isScore=e.kind==='score_change'||e.kind==='end_of_game'||e.kind==='kickoff';
- s.innerHTML=`<h2><span class="lbl">${esc(e.kind.replace(/_/g,' '))}</span>${gold?'<span class="tag g">locked</span>':'<span class="tag a">read · not locked</span>'}${e.legal_step===false?'<span class="tag w">not a legal scoring step</span>':''}</h2>
+ s.innerHTML=`<h2><span class="lbl">${esc(e.kind.replace(/_/g,' '))}</span>${gold?'<span class="tag g">locked</span>':'<span class="tag a">read · not locked</span>'}${e.play?`<span class="tag">${esc(e.play)}</span>`:''}${e.legal_step===false?'<span class="tag w">not a legal scoring step</span>':''}</h2>
  <div class="big ${gold?'lockg glint':(sc(after)?'unl':'')}" id="bigs"></div>
  <div class="sub"><span>away – home</span>${e.delta?`<span class="mono">Δ ${esc(e.delta.away)} / ${esc(e.delta.home)}</span>`:''}</div>
  <div class="kv"><b>before</b><span>${v(sc(e.score_before))}</span><b>quarter · clock</b><span>Q${v(e.quarter)} · ${v(clk(e.clock_s))}</span>
  <b>wall time</b><span>${nil(e.t_ms)?M:esc(new Date(e.t_ms).toISOString().replace('T',' ').replace('Z',' UTC'))}</span><b>recording</b><span>${nil(e.recording_s)?M:esc(e.recording_s)+' s'}</span>
- <b>confidence</b><span>${v(e.confidence)} <span style="color:var(--dim)">${v(e.confidence_note)}</span></span><b>basis</b><span>${v(e.basis)}</span>
+ ${nil(e.pre_roll_s)?'':`<b>burst</b><span>from ${esc(e.pre_roll_s)} s before the event${e.pre_roll_s>3.5?' (pre-roll back to the last read of the old score, to cover the scoring play)':''}</span>`}<b>confidence</b><span>${v(e.confidence)} <span style="color:var(--dim)">${v(e.confidence_note)}</span></span><b>basis</b><span>${v(e.basis)}</span>
  ${e.kind==='end_of_game'?`<b>final confirmed</b><span>${e.final_confirmed?'yes':'<span class="miss">no</span>'}</span><b>method</b><span>${v(e.final_method)}</span>`:''}</div>`;
  flipScore($('#bigs'),e.score_before||(isScore?{away:0,home:0}:after),after);
  if(gold&&!RM){const b=$('#bigs');requestAnimationFrame(()=>b.classList.add('go'))}
