@@ -1,6 +1,8 @@
 // node verify/test.mjs : JCS parity + JS verifier against the Python-produced vectors.
 import { readFileSync } from "node:fs";
-import { canonicalize, sha256Hex, verifyReceipt, challengeEvidenceErrors, inputProofAdvisory } from "./verify.js";
+import { canonicalize, sha256Hex, verifyReceipt, challengeEvidenceErrors, inputProofAdvisory, checkDelegation,
+         revocationsProblem, receiptBodyHash, verifyInclusion, verifyLogEntries, verifyLogHead, loadAllowlist } from "./verify.js";
+import { REFEREE_REVOCATIONS } from "./referee_revocations.inc.js";
 const v = JSON.parse(readFileSync(new URL("../tests/vectors/jcs_vector.json", import.meta.url)));
 let fails = 0;
 const ok = (c, m) => { console.log((c ? "ok   " : "FAIL ") + m); if (!c) fails++; };
@@ -46,5 +48,38 @@ ok((await verifyReceipt(rt, rv.referee_pub, { allowlist: rv.allowlist })).status
 const rt2 = structuredClone(rv.receipt); rt2.challenges[0].issuer.issued_ms -= 1;
 r = await verifyReceipt(rt2, rv.referee_pub, { allowlist: rv.allowlist });
 ok(r.status === "FAIL", "tampered challenge token (covered by referee signature) => FAIL");
+// ---- delegated online referee key (root-signed cert), revocation, transparency log
+const dv = JSON.parse(readFileSync(new URL("../tests/vectors/delegated_review_receipt.json", import.meta.url)));
+const dopt = { allowlist: dv.allowlist, revocations: dv.revocations };
+r = await verifyReceipt(dv.receipt, dv.referee_pub, dopt);
+ok(r.status === "VERIFIED" && r.delegation && r.delegation.serial === 1, "delegated service key + root cert => VERIFIED in JS");
+ok((await verifyReceipt(dv.receipt, dv.referee_pub)).status === "SELF_ATTESTED", "delegation from a root not on the built-in allowlist => SELF_ATTESTED");
+r = await verifyReceipt(dv.receipt, dv.referee_pub, { allowlist: dv.allowlist, revocations: dv.revoked_list });
+ok(r.status === "SELF_ATTESTED" && r.partial.includes("delegation_revoked:1"), "revoked delegation serial => SELF_ATTESTED");
+const forgedRevs = structuredClone(dv.revocations); forgedRevs.revoked = [];  forgedRevs.version = 99;
+r = await verifyReceipt(dv.receipt, dv.referee_pub, { allowlist: dv.allowlist, revocations: forgedRevs });
+ok(r.status === "SELF_ATTESTED" && r.partial.includes("revocations_bad_signature"), "unsigned/forged revocation list => fail closed");
+r = await verifyReceipt(dv.receipt, dv.referee_pub, { allowlist: dv.allowlist, revocations: null });
+ok(r.status === "SELF_ATTESTED" && r.partial.includes("revocations_missing"), "missing revocation list => fail closed");
+const cert = dv.receipt.referee.delegation;
+let dd = await checkDelegation(cert, dv.referee_pub, cert.not_after_ms + 1, { ...dopt, nowMs: cert.not_after_ms + 2 });
+ok(!dd.info && dd.problems.includes("delegation_expired"), "signing time after not_after => delegation_expired");
+dd = await checkDelegation(cert, dv.referee_pub, cert.not_before_ms - 1, dopt);
+ok(!dd.info && dd.problems.includes("delegation_not_yet_valid"), "signing time before not_before => not yet valid");
+const wide = structuredClone(cert); wide.not_after_ms += 86400000;
+dd = await checkDelegation(wide, dv.referee_pub, dv.receipt.review.reviewed_ms, dopt);
+ok(!dd.info && dd.problems.includes("delegation_bad_signature"), "widened cert window => bad root signature");
+dd = await checkDelegation(cert, "00".repeat(32), dv.receipt.review.reviewed_ms, dopt);
+ok(!dd.info && dd.problems.includes("delegation_key_mismatch"), "cert for another key => mismatch");
+const rx = structuredClone(dv.receipt); rx.referee.delegation.not_after_ms += 1;
+ok((await verifyReceipt(rx, dv.referee_pub, dopt)).status === "FAIL", "tampered embedded cert (covered by service sig) => FAIL");
+ok((await revocationsProblem(REFEREE_REVOCATIONS, loadAllowlist())) === null, "shipped revocation list is signed by the built-in root");
+const bh = await receiptBodyHash(dv.receipt);
+ok((await verifyLogHead(dv.log_head, dv.referee_pub)) && (await verifyLogEntries(dv.log_entries)).length === 0, "transparency log head signature + chain");
+ok((await verifyInclusion(bh, dv.log_entries, dv.log_head)).length === 0, "receipt inclusion in transparency log (JS)");
+const le = structuredClone(dv.log_entries); le[0].body_sha256 = "f".repeat(64);
+ok((await verifyInclusion(bh, le, dv.log_head)).length > 0, "rewritten log entry => inclusion fails");
+// legacy root-signed review receipt (no delegation) still VERIFIED with the shipped revocation list loaded
+ok((await verifyReceipt(rv.receipt, rv.referee_pub, { allowlist: rv.allowlist })).status === "VERIFIED", "legacy direct-signed review receipt still VERIFIED");
 process.exit(fails ? 1 : 0);
 
