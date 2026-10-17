@@ -100,8 +100,10 @@ def test_burst_frames_from_video(tmp_path):
                     "-pix_fmt", "yuv420p", str(v)], check=True)
     idx = build_index(_bundle(tmp_path / "b"), tmp_path / "o", video=v)
     sc = idx["events"][1]
-    assert len(sc["frames"]) == 10 and all(f["ok"] for f in sc["frames"]) and sc["contact_sheet"]
-    assert sc["frames"][0]["dt_s"] == -3.0 and sc["frames"][-1]["dt_s"] == 2.0
+    # +7 = TD + PAT: burst pre-rolls to PLAY_PAD_S before the last read of the old score (9 s) so the play is in frame
+    assert sc["play"].startswith("touchdown + extra point") and sc["pre_roll_s"] == 5.0
+    assert len(sc["frames"]) == 18 and all(f["ok"] for f in sc["frames"]) and sc["contact_sheet"]
+    assert sc["frames"][0]["dt_s"] == -5.0 and sc["frames"][-1]["dt_s"] == 2.0
     assert "data:image/jpeg;base64," in (tmp_path / "o" / "viewer.html").read_text()
 
 
@@ -139,3 +141,26 @@ def test_viewer_mobile_contract(tmp_path):
     assert "pointercancel" in TEMPLATE and 'id="prv"' in TEMPLATE and 'id="nxt"' in TEMPLATE
     assert "width:44px;height:44px" in TEMPLATE  # markers / step buttons meet the 44px touch target
     assert "prefers-reduced-motion" in TEMPLATE and "(pointer:coarse)" in TEMPLATE
+
+
+def test_scoring_play_labels_and_preroll_window():
+    """2026-10-17 match 021003: TD bursts showed the PAT setup (scorebug updates ~10-20 s after the TD), PATs looked like FGs."""
+    from qor_receipt.match_index.build import MAX_PRE_S, Clock, burst_window
+    tl = [_read(i * 1000, 0, 0, c=300 - i) for i in range(0, 10)]           # last 0-0 read at 9 s
+    tl += [_read(i * 1000, 0, 6, c=280) for i in range(30, 36)]             # TD shows on the scorebug at 30 s (21 s later)
+    tl += [_read(i * 1000, 0, 7, c=280) for i in range(40, 45)]             # PAT
+    tl += [_read(i * 1000, 3, 7, c=200) for i in range(100, 105)]           # FG
+    tl += [_read(i * 1000, 5, 7, c=150) for i in range(400, 405)]           # +2 long after any TD = safety
+    tl += [_read(i * 1000, 5, 13, c=100) for i in range(500, 503)] + [_read(i * 1000, 5, 15, c=100) for i in range(520, 523)]
+    tl += [_read(i * 1000, 5, 15, c=100) for i in range(600, 700)]          # 60+ s of reads after the last old read
+    tl += [_read(i * 1000, 12, 15, c=90) for i in range(700, 703)]          # +7 with a long gap: capped at MAX_PRE_S
+    sc = [e for e in detect_events(tl, None, None, False) if e["kind"] == "score_change"]
+    assert [e["play"].split(" (")[0] for e in sc] == ["touchdown", "extra point", "field goal", "safety", "touchdown",
+                                                       "two-point conversion", "touchdown + extra point"]
+    clock = Clock([{"type": "segment", "mono_ms": i * 1000, "wall_ms": W0 + i * 1000, "frames": i * 30} for i in range(800)])
+    a, z, n, pre = burst_window(sc[0], 30.0, clock)
+    assert (a, z, n, pre) == (5.0, 32.0, 18, 25.0)                         # TD: from 4 s before the last 0-0 read
+    assert burst_window(sc[1], 40.0, clock) == (37.0, 42.0, 10, 3.0)       # PAT keeps the short burst
+    assert burst_window(sc[6], 700.0, clock)[3] == 5.0                     # last 5-15 read at 699 s, minus the 4 s pad
+    gap = dict(sc[6], last_old_read_t_ms=W0 + 100_000)
+    assert burst_window(gap, 700.0, clock)[3] == MAX_PRE_S                 # never more than MAX_PRE_S

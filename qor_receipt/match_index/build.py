@@ -18,6 +18,11 @@ BUTTONS = ["CROSS", "CIRCLE", "SQUARE", "TRIANGLE", "L1", "R1", "L2", "R2", "CRE
            "UP", "DOWN", "LEFT", "RIGHT", "PS", "TOUCHPAD", "MUTE", "FN_L", "FN_R", "BACK_L", "BACK_R"]  # qorcap src/hid.rs
 ADVISORY = "Advisory evidence only: controller inputs/haptics show activity in sync with the video, not who played or what happened."
 PRE_S, POST_S, N_FRAMES = 3.0, 2.0, 10
+# Scoring plays: the scorebug only shows the new score after the play, celebration and replay (Madden: often 10-20 s after a TD
+# crosses the goal line), so a burst at the score change shows the try/PAT setup. Scoring-play bursts therefore pre-roll back
+# to just before the last read of the OLD score (the play happened between that read and the first new read).
+PLAY_PAD_S, MAX_PRE_S, PLAY_FRAMES = 4.0, 40.0, 18
+TRY_WINDOW_MS = 120_000  # a +1/+2 by the team that just went +6 within this window is the try after the touchdown
 INPUT_WIN = (-5.0, 3.0)
 STRIP_WIN, STRIP_BIN = (-10.0, 5.0), 0.25
 STABLE_READS = 2
@@ -119,6 +124,7 @@ def detect_events(tl: list[dict], result: dict | None, final: dict | None, final
                "basis": "first scorebug read with a running Q1 clock" if first_clock else "first scorebug read (no clock read)",
                "confidence": 0.6 if first_clock else 0.3})
     stable = (reads[0]["away"], reads[0]["home"])
+    stable_t = reads[0]["t_ms"]
     stable_q = next((r["quarter"] for r in reads if r.get("quarter") is not None), None)
     i = 0
     while i < len(reads):
@@ -137,10 +143,15 @@ def detect_events(tl: list[dict], result: dict | None, final: dict | None, final
                            "score_before": {"away": stable[0], "home": stable[1]}, "score_after": {"away": cur[0], "home": cur[1]},
                            "delta": {"away": delta[0], "home": delta[1]}, "legal_step": legal,
                            "reads_agreeing": run, "basis": f"scorebug change held {run} consecutive reads",
-                           "confidence": round(min(1.0, 0.4 + 0.5 * agree + (0.1 if legal else -0.3)), 2)})
+                           "confidence": round(min(1.0, 0.4 + 0.5 * agree + (0.1 if legal else -0.3)), 2),
+                           "last_old_read_t_ms": stable_t})
+                ev[-1]["play"] = scoring_play(ev[-1], [e for e in ev[:-1] if e["kind"] == "score_change"])
                 stable = cur
+                stable_t = reads[i + run - 1]["t_ms"]
             i += run
             continue
+        if cur == stable:
+            stable_t = r["t_ms"]
         i += 1
     qs = [r for r in reads if r.get("quarter") is not None]
     for n in range(1, len(qs)):
@@ -168,6 +179,37 @@ def detect_events(tl: list[dict], result: dict | None, final: dict | None, final
                          "scorebug disappeared after last read; end-of-game menu NOT read by the engine (bundle.final is null)"),
                "confidence": 0.9 if (fin_src and final_confirmed) else (0.5 if fin_src else 0.2)})
     return ev
+
+
+def scoring_play(e: dict, prior: list[dict]) -> str | None:
+    """Name the scoring step from its size (and the previous step), so a PAT kick is not mistaken for a field goal."""
+    if not e.get("legal_step"):
+        return None
+    d = e["delta"]
+    side = "away" if d["away"] else "home"
+    n = d[side]
+    prev = prior[-1] if prior else None
+    after_td = bool(prev and prev.get("delta", {}).get(side) == 6 and e["t_ms"] - prev["t_ms"] <= TRY_WINDOW_MS)
+    if n == 1:
+        return "extra point (PAT kick, +1)"
+    if n == 2:
+        return "two-point conversion (+2)" if after_td else "safety (+2)"
+    return {3: "field goal (+3)", 6: "touchdown (+6, try not yet on the scorebug)",
+            7: "touchdown + extra point (+7; the +6 state was never read)",
+            8: "touchdown + two-point conversion (+8; the +6 state was never read)"}.get(n)
+
+
+def burst_window(e: dict, rec_s: float, clock: "Clock") -> tuple[float, float, int, float]:
+    """(start, end, n_frames, pre_roll_s) in recording seconds for an event's burst."""
+    a, z, n_f = rec_s - PRE_S, rec_s + POST_S, N_FRAMES
+    play = e.get("play") or ""
+    if e["kind"] == "score_change" and play and not play.startswith(("extra point", "two-point conversion")) and e.get("last_old_read_t_ms"):
+        old_s = clock.video_s(e["last_old_read_t_ms"])
+        if old_s is not None:
+            a = min(a, max(old_s - PLAY_PAD_S, rec_s - MAX_PRE_S))
+            if rec_s - a > PRE_S + 1:
+                n_f = PLAY_FRAMES
+    return a, z, n_f, round(rec_s - a, 2)
 
 
 def bind_checkpoints(e: dict, cps: list[dict], clips: list[dict]) -> dict:
@@ -339,7 +381,8 @@ def _build(bdir: Path, out: Path, video: Path | None, video_tail: bool | None, f
             z = clock.video_s(e["end_window_ms"][1]) - vid_offset
             n_f = 12
         else:
-            a, z, n_f = rec_s - vid_offset - PRE_S, rec_s - vid_offset + POST_S, N_FRAMES
+            a, z, n_f, e["pre_roll_s"] = burst_window(e, rec_s, clock)
+            a, z = a - vid_offset, z - vid_offset
         a, z = max(0.0, a), min(vdur - 0.05, z)
         if z <= 0 or a >= vdur:
             e["frames_missing_reason"] = f"event at recording {rec_s:.1f}s is outside the supplied video ({align}, covers recording {vid_offset:.1f}..{vid_offset + vdur:.1f}s)"
