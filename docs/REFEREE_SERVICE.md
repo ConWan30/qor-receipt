@@ -107,7 +107,21 @@ QorCap SHA), `QORTIME_RANDOM_SEGMENTS` (16), `QORTIME_TAIL_MS` (240000), `QORTIM
 `QORTIME_SUBMIT_TOKEN` (optional shared secret for submissions; unset = open).
 
 In-flight submissions live in `/tmp` and expire after 1 h (a restart drops them; the client just re-submits).
-Nothing is persisted on the Railway volume.
+The service has no volume, so nothing is persisted.
+
+### Deployment record (2026-10-16 CDT)
+
+- Railway service `qortime-referee` `fefa2ecd-b255-4ee8-ba71-6607f24ccc22` runs in project `zesty-mindfulness`
+  (`d2fab6f8-…`), environment `production`. Source is `ConWan30/qortime@main`. The Dockerfile path is set to
+  `services/referee/Dockerfile` (service config plus `RAILWAY_DOCKERFILE_PATH`). Watch patterns are `qor_receipt/**`,
+  `services/referee/**` and `pyproject.toml`. The healthcheck is `/health`.
+- `QORTIME_REFEREE_SEED` was set with the Railway MCP `set-variables` call. The value was substituted from
+  the operator box file `qortime-keys/qortime-referee-v1.key` at call time, so it was never printed, logged or committed.
+  `QORTIME_REFEREE_ID=qortime-v1` and `QORTIME_MAX_ACTIVE=4`. `QORTIME_SUBMIT_TOKEN` is unset, so submissions are open.
+  The size caps and the max-active limit bound abuse.
+- After deploy, `GET /v1/referee` reported pubkey `a5aa0c91…feea`, `allowlisted: true`, `final_reader: true` and
+  `ffmpeg: true`.
+- To rotate, set a new seed the same way, add the new allowlist entry and retire the old one (`TRUSTED_REFEREES.md`).
 
 Cost: one small always-on Railway container (≈0.25–0.5 vCPU idle-light, 512 MB–1 GB RAM while decoding).
 Ingress is free on Railway; a spot-check is ~150–300 MB per match (mostly the 240 s tail), `--full` 1–3 GB.
