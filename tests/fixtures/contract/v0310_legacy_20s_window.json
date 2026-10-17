@@ -1,0 +1,228 @@
+{
+ "expect": {
+  "errors": [],
+  "partial": [
+   "referee_not_on_allowlist",
+   "referee_local_self_attested",
+   "referee_pin_not_allowlisted",
+   "home:motion_signal_missing"
+  ],
+  "status": "SELF_ATTESTED"
+ },
+ "name": "v0310_legacy_20s_window",
+ "receipt": {
+  "agreement": {
+   "mismatches": [],
+   "timelines_agree": null
+  },
+  "challenges": [
+   {
+    "deadline_ms": 1792000021000,
+    "id": "00112233",
+    "issued_ms": 1792000001000,
+    "nonce": "00112233445566778899aabbccddeeff",
+    "pattern": [
+     "OPTIONS",
+     "CROSS",
+     "SQUARE",
+     "DOWN",
+     "SQUARE"
+    ],
+    "phase": "kickoff",
+    "result": {
+     "done_ms": 1792000005900,
+     "hid_sha256": "0000000000000000000000000000000000000000000000000000000000000007",
+     "latency_ms": 180,
+     "ok": true,
+     "pause_press_ms": 1792000003500,
+     "reason": "ok",
+     "reverified_by": "recorder"
+    },
+    "role": "home"
+   },
+   {
+    "deadline_ms": 1792000025000,
+    "id": "ffeeddcc",
+    "issued_ms": 1792000005000,
+    "nonce": "ffeeddccbbaa99887766554433221100",
+    "pattern": [
+     "OPTIONS",
+     "CIRCLE",
+     "UP",
+     "RIGHT",
+     "CIRCLE"
+    ],
+    "phase": "halftime",
+    "result": {
+     "done_ms": 1792000009900,
+     "hid_sha256": "0000000000000000000000000000000000000000000000000000000000000008",
+     "latency_ms": 180,
+     "ok": true,
+     "pause_press_ms": 1792000007500,
+     "reason": "ok",
+     "reverified_by": "recorder"
+    },
+    "role": "home"
+   },
+   {
+    "deadline_ms": 1792000029000,
+    "id": "01234567",
+    "issued_ms": 1792000009000,
+    "nonce": "0123456789abcdef0123456789abcdef",
+    "pattern": [
+     "OPTIONS",
+     "SQUARE",
+     "LEFT",
+     "SQUARE",
+     "LEFT"
+    ],
+    "phase": "end",
+    "result": {
+     "done_ms": 1792000013900,
+     "hid_sha256": "0000000000000000000000000000000000000000000000000000000000000009",
+     "latency_ms": 180,
+     "ok": true,
+     "pause_press_ms": 1792000011500,
+     "reason": "ok",
+     "reverified_by": "recorder"
+    },
+    "role": "home"
+   }
+  ],
+  "checkpoints": {
+   "home": [
+    {
+     "frames_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+     "hash": "5b718b8274a4aad707d76029e699e6f2d9404034d61c4616b29e68e645ed8c71",
+     "input_hash": "0000000000000000000000000000000000000000000000000000000000000064",
+     "prev": "0000000000000000000000000000000000000000000000000000000000000000",
+     "referee_sig": "88456a8f56af31ae54d29de833e414c4c7b5391e1e7439c56c208e084a6090262ace65873b875c9454ccec64a76e64f884e95758103843016a4a92e00df3e204",
+     "referee_ts_ms": 1792000000620,
+     "seq": 0,
+     "t_ms": 1792000000500
+    },
+    {
+     "frames_hash": "0000000000000000000000000000000000000000000000000000000000000001",
+     "hash": "94a79d01289704ccac1f9dc40bb065bbfcdb6c5aaf3595dfb3c0c32d2be250d3",
+     "input_hash": "0000000000000000000000000000000000000000000000000000000000000065",
+     "prev": "5b718b8274a4aad707d76029e699e6f2d9404034d61c4616b29e68e645ed8c71",
+     "referee_sig": "8d52e3f9aeda8e5c0b164455d656c0498959e7a759d15bb93becabc7c5728954ac0dcf7836cffb1658e4005b148c3394c1440cfbaab0f26a1472f525de8fe60f",
+     "referee_ts_ms": 1792000002620,
+     "seq": 1,
+     "t_ms": 1792000002500
+    },
+    {
+     "frames_hash": "0000000000000000000000000000000000000000000000000000000000000002",
+     "hash": "d20b9c5935a82cd08699912924b71df693f576be904fead20c5ace20c5361232",
+     "input_hash": "0000000000000000000000000000000000000000000000000000000000000066",
+     "prev": "94a79d01289704ccac1f9dc40bb065bbfcdb6c5aaf3595dfb3c0c32d2be250d3",
+     "referee_sig": "292e35abfff74d2db3fd92ef39cb3aab373b3c1c5839862ad5f28a678d063c0db5a555123a369786b9e1dc8ed899722d8e9eb694aad62a6d22a0c06becfd5d00",
+     "referee_ts_ms": 1792000004620,
+     "seq": 2,
+     "t_ms": 1792000004500
+    },
+    {
+     "frames_hash": "0000000000000000000000000000000000000000000000000000000000000003",
+     "hash": "e10a2de894e9198e89bd28b8591d5975c615b6d94f83a1092d0b940a92124b04",
+     "input_hash": "0000000000000000000000000000000000000000000000000000000000000067",
+     "prev": "d20b9c5935a82cd08699912924b71df693f576be904fead20c5ace20c5361232",
+     "referee_sig": "4d4a4ce103bce00524172e67a272ae473806850f671dbe9cf7414a6fb42c2b78b5979dbd4289f06f3173274756b9666c812dd699d67d3187636bf580bc18c703",
+     "referee_ts_ms": 1792000006620,
+     "seq": 3,
+     "t_ms": 1792000006500
+    },
+    {
+     "frames_hash": "0000000000000000000000000000000000000000000000000000000000000004",
+     "hash": "2bb0926d798eb6f978313621ea86b13c281ff1ac34a6b865db515e2668a2fb20",
+     "input_hash": "0000000000000000000000000000000000000000000000000000000000000068",
+     "prev": "e10a2de894e9198e89bd28b8591d5975c615b6d94f83a1092d0b940a92124b04",
+     "referee_sig": "4a9f5899b2dbd2563b82b5ee0b169a202cf0e277d501aca6d923e25cbb6cb3e1d7db9e6be97c8600787915a0fdeeb9100a86a0186cc6ced03a8f1aae0d125001",
+     "referee_ts_ms": 1792000008620,
+     "seq": 4,
+     "t_ms": 1792000008500
+    },
+    {
+     "frames_hash": "0000000000000000000000000000000000000000000000000000000000000005",
+     "hash": "4c56e4e3f2cb959f22b68f138e555344c188c1df4f8292786708d0e8995ec6bc",
+     "input_hash": "0000000000000000000000000000000000000000000000000000000000000069",
+     "prev": "2bb0926d798eb6f978313621ea86b13c281ff1ac34a6b865db515e2668a2fb20",
+     "referee_sig": "97705b39038057b7f077fcdbd8ca5ba1266d21b7e911efb1b075e383bac114d80458fa7b979f0743af69c1ccaf6451b2d861fa46674be4ee33408f1706583e0f",
+     "referee_ts_ms": 1792000010620,
+     "seq": 5,
+     "t_ms": 1792000010500
+    },
+    {
+     "frames_hash": "0000000000000000000000000000000000000000000000000000000000000006",
+     "hash": "cb762ee9a8915ddd330e737ddb28b26f7f1fe5bccc492ca637ae815a0f16f41c",
+     "input_hash": "000000000000000000000000000000000000000000000000000000000000006a",
+     "prev": "4c56e4e3f2cb959f22b68f138e555344c188c1df4f8292786708d0e8995ec6bc",
+     "referee_sig": "9942d7587c3d25646e515cd7bbe3bbba3d02bc5c16179a9f74cbe40d07a713e2064f4d20c84f0b26d4d9cbb00ecf4101e31f92a33ceae19324052e508ee83e09",
+     "referee_ts_ms": 1792000012650,
+     "seq": 6,
+     "t_ms": 1792000012500
+    },
+    {
+     "frames_hash": "0000000000000000000000000000000000000000000000000000000000000007",
+     "hash": "b377823e155bd6730d1f8f478a3ff93538b0144fe0d6cdb0e034a62047d47c9b",
+     "input_hash": "000000000000000000000000000000000000000000000000000000000000006b",
+     "prev": "cb762ee9a8915ddd330e737ddb28b26f7f1fe5bccc492ca637ae815a0f16f41c",
+     "referee_sig": "f81172cbaa125ca71eaa6936e1ebf214f90bdc90cb53643e3ee71d4adc27fcbb2574b56ef2f58df695886ae7677cbf3d1b0021108d47dbca89fbc3a276c7950a",
+     "referee_ts_ms": 1792000014650,
+     "seq": 7,
+     "t_ms": 1792000014500
+    }
+   ]
+  },
+  "match": {
+   "ended_ms": 1792000014650,
+   "game": "madden27",
+   "match_id": "local-contract-1",
+   "mode": "single",
+   "platform": "ps5",
+   "scorebug_profile": "madden27_standard",
+   "started_ms": 1792000000000
+  },
+  "players": [
+   {
+    "key_kind": "software-file",
+    "player_id": "local:player",
+    "pubkey": "d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737",
+    "role": "home"
+   }
+  ],
+  "referee": {
+   "key_id": "1325b850c2871916",
+   "key_kind": "local-self-attested",
+   "pubkey": "a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0"
+  },
+  "result": {
+   "away_score": 17,
+   "final_basis": "clock_zero",
+   "final_t_ms": 1792000014000,
+   "home_score": 21,
+   "method": "agreed_scorebug_final",
+   "quarter": 4,
+   "winner": "home"
+  },
+  "schema": "qor-receipt/v0",
+  "signals": {
+   "motion_permille": {
+    "home": null
+   }
+  },
+  "signatures": {
+   "players": {
+    "home": {
+     "key_id": "10ba682c8ad13513",
+     "sig": "b1dd382e58bf39e8950c04bde19864954f04faeaa2ca4f6e5b8a742aafb9a2d264f0139261d1ff0985172546f2a26a69942a52ae652c3e221137cd290a066308"
+    }
+   },
+   "referee": {
+    "key_id": "1325b850c2871916",
+    "sig": "7a6d76fcdf292bcb9f2e65a09b3a7f7b4c96a81584bfbb9bbe4aa250246ce1ac43f34e569ddea2c6cfc9b48221d646ed57f94e0665475d82762e175061b2b30c"
+   }
+  },
+  "trust_tier": "single-attested"
+ },
+ "referee_pub": "a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0"
+}

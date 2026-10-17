@@ -22,6 +22,7 @@ from qor_receipt.challenge import (
     motion_correlation_permille,
     new_nonce,
     pattern_for,
+    response_press_ms,
     verify_response,
 )
 from qor_receipt.jcs import canonicalize, sha256_hex
@@ -413,9 +414,8 @@ class Referee:
                 except Exception as e:  # never silent
                     onsets = []
                     notes.append(f"{c.get('phase')}: pause detector error {type(e).__name__}")
-                pp = next((p["t_ms"] for p in sorted(win, key=lambda p: p["t_ms"]) if p["button"] == "OPTIONS"), None)
-                if pp is not None:
-                    pause_seen = next((o for o in onsets if pp - 300 <= o <= pp + 5_000), None)
+                pp = response_press_ms(c2["pattern"] or [], win, issued_ms=issued, deadline_ms=deadline)
+                pause_seen = pause_seen_for(pp, onsets)
             res = verify_response(c2["pattern"] or [], [{"t_ms": p["t_ms"], "button": p["button"], "down": True} for p in win],
                                   issued_ms=issued, deadline_ms=deadline, pause_seen_ms=pause_seen).to_dict()
             res["hid_sha256"] = sha256_hex(win)
@@ -514,14 +514,21 @@ class Referee:
         return n
 
 
+def pause_seen_for(press_ms: int | None, onsets: list[int]) -> int | None:
+    """The pause-menu onset that belongs to the answering OPTIONS press (latency is judged by verify_response)."""
+    if press_ms is None:
+        return None
+    return next((o for o in sorted(onsets) if press_ms - 300 <= o <= press_ms + 5_000), None)
+
+
 def _challenge_seqs(b: B.Bundle, c: dict[str, Any], presses: list[dict[str, Any]], wmm: int) -> list[int]:
-    """Segments the referee needs to see the pause menu for one challenge: around the first OPTIONS press inside the
-    challenge window (from the committed controller log), or the whole window when there is no press."""
+    """Segments the referee needs to see the pause menu for one challenge: around the answering OPTIONS press (the
+    first one followed by the pattern, else the first) inside the challenge window (from the committed controller log), or the whole window when there is no press."""
     try:
         issued, deadline = int(c["issued_ms"]), int(c["deadline_ms"])
     except (KeyError, TypeError, ValueError):
         return []
-    pp = next((p["t_ms"] for p in presses if p["button"] == "OPTIONS" and issued <= p["t_ms"] <= deadline), None)
+    pp = response_press_ms(c.get("pattern") or [], presses, issued_ms=issued, deadline_ms=deadline)
     lo, hi = (pp - 1_000, pp + 5_000) if pp is not None else (issued, deadline)
     lo, hi = lo - wmm, hi - wmm
     # a segment covers (prev mono_ms, mono_ms]; include every segment overlapping [lo, hi]

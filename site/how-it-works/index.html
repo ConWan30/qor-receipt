@@ -42,7 +42,7 @@
    <div>
     <h2>Capture, with QorCap</h2>
     <p>Run QorCap on the Windows PC with your capture card. It records the match and fingerprints the video as it is written. Each segment is SHA-256 hashed into a chain, and timestamped checkpoints commit to the score state, so cutting or editing the file afterwards shows up. It is built to stay light during play.</p>
-    <p class="fine">Controller button presses logged from the same session: <b>coming in v0.3</b>.</p>
+    <p class="fine">Controller button presses are logged from the same session (shipped in QorCap v0.3.0): each button press is hashed into the same checkpoints as the video.</p>
    </div>
   </li>
   <li class="step glass" id="prove">
@@ -73,7 +73,7 @@
  </ol>
  <div class="glass limits" id="limits" style="margin:18px 0 48px">
   <h2>The honest limit</h2>
-  <p>QorTime proves the footage's integrity and timing, and (coming in v0.3) the controller inputs from the same session. It does <b>not</b> prove who held the controller.</p>
+  <p>QorTime proves the footage's integrity and timing, and the controller inputs from the same session (QorCap v0.3.0 and later). It does <b>not</b> prove who held the controller.</p>
   <ul>
    <li><b>Account sharing.</b> Who is physically holding the controller.</li>
    <li><b>Collusion.</b> Both players agreeing to throw or fake a match.</li>
