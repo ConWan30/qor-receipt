@@ -59,18 +59,35 @@ pre{background:#161b22;padding:.75rem;border-radius:6px;white-space:pre-wrap}sma
 <div id="badge"></div><pre id="out" hidden></pre>
 <script type="module">
 import { verifyReceipt } from "./verify.js";
-import { apiBase, isValidReceiptId, receiptIdFrom } from "./verified-match.js";
+import { apiBase, badgeMatchesReceipt, isValidReceiptId, receiptIdFrom } from "./verified-match.js";
+import { sha256Hex } from "./verify.js";
 const $ = (id) => document.getElementById(id);
-const q = new URLSearchParams(location.search); if (q.get("referee")) $("pub").value = q.get("referee");
+const q = new URLSearchParams(location.search);
+  if (q.get("referee")) {
+    $("pub").value = q.get("referee");
+    const warn = document.createElement("p");
+    warn.style.cssText = "color:#ffb000;font-size:.9rem;margin:.4rem 0 0";
+    warn.textContent = "Warning: the pinned referee key was filled from the URL (?referee=). Only trust this if you chose that key yourself — a cheater can send a link that pins their own key and make a forged receipt look VERIFIED.";
+    $("pub").parentNode.insertBefore(warn, $("pub").nextSibling);
+  }
 let pollTimer = 0;
 
 function currentReceipt() {
   try { return JSON.parse($("json").value); } catch { return null; }
 }
 
-function setPaid(data, id) {
-  const paid = data?.paid === true;
+async function receiptContentSha(receipt) {
+  if (!receipt || typeof receipt !== "object") return null;
+  const body = Object.fromEntries(Object.entries(receipt).filter(([k]) => k !== "signatures"));
+  try { return await sha256Hex(body); } catch { return null; }
+}
+
+function setPaid(data, id, contentSha) {
+  const paid = badgeMatchesReceipt(data, contentSha);
   $("vm-badge").hidden = !paid;
+  if (data?.paid === true && data?.receipt_sha256 && !paid) {
+    $("vm-err").textContent = "A test payment exists for this receipt id, but it was bound to different receipt bytes. The gold badge stays hidden.";
+  }
   const status = data?.payment_status;
   if (!apiBase()) {
     $("vm-state").innerHTML = "<small>Receipt checkout API is not configured on this deploy yet. The Payment Link on the home page still opens Stripe test checkout.</small>";
@@ -96,7 +113,9 @@ async function refreshPaid(id) {
   if (!base) { setPaid(null, id); return; }
   const res = await fetch(`${base}/v1/receipts/${encodeURIComponent(id)}`);
   if (!res.ok) throw new Error(`Paid lookup failed (${res.status})`);
-  setPaid(await res.json(), id);
+  const data = await res.json();
+  const sha = await receiptContentSha(currentReceipt());
+  setPaid(data, id, sha);
 }
 
 function watchReceipt() {
@@ -127,7 +146,7 @@ $("vm-buy").onclick = async () => {
     const res = await fetch(`${base}/v1/checkout`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ receipt_id: id }),
+      body: JSON.stringify({ receipt_id: id, receipt_sha256: await receiptContentSha(currentReceipt()) }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || `Checkout failed (${res.status})`);

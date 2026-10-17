@@ -11,3 +11,9 @@ export function receiptIdFrom(receipt) {
   const id = typeof explicit === "string" && explicit.length > 0 ? explicit : matchId;
   return isValidReceiptId(id) ? id : null;
 }
+
+const RECEIPT_SHA = /^[0-9a-f]{64}$/i;
+
+export function isValidReceiptSha256(value) {
+  return typeof value === "string" && RECEIPT_SHA.test(value);
+}

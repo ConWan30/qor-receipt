@@ -1,4 +1,5 @@
 const RECEIPT_ID = /^[A-Za-z0-9._:-]{1,128}$/;
+const RECEIPT_SHA = /^[0-9a-f]{64}$/i;
 
 export const VERIFIED_MATCH = {
   mode: "test",
@@ -11,6 +12,10 @@ export const VERIFIED_MATCH = {
 
 export function isValidReceiptId(value) {
   return typeof value === "string" && RECEIPT_ID.test(value);
+}
+
+export function isValidReceiptSha256(value) {
+  return typeof value === "string" && RECEIPT_SHA.test(value);
 }
 
 export function receiptIdFrom(receipt) {
@@ -30,4 +35,11 @@ export function apiBase() {
     return override.replace(/\/$/, "");
   }
   return configured;
+}
+
+/** True when a paid record is bound to this exact receipt body (or legacy unpaid-hash records). */
+export function badgeMatchesReceipt(record, receiptSha256) {
+  if (!record || record.paid !== true) return false;
+  if (!record.receipt_sha256) return true; // legacy test payments before content binding
+  return isValidReceiptSha256(receiptSha256) && record.receipt_sha256.toLowerCase() === receiptSha256.toLowerCase();
 }
