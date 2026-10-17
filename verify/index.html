@@ -182,8 +182,12 @@ $("go").onclick = async () => {
   $("badge").innerHTML = `${v.status}<span class="tier">${v.trust_tier ?? "no tier"} · referee ${v.referee_trust ?? "?"}${v.referee_id ? " ("+v.referee_id+")" : ""}</span>`;
   const res = r.result || {};
   $("out").hidden = false;
+  const basis = v.verification_basis === "official-post-hoc-review"
+    ? `basis: official post-hoc review (${v.review?.video_method}: ${v.review?.segments_verified}/${v.review?.segments_total} video segments checked by the QorTime referee)\n` +
+      `not proven: ${(v.review?.not_proven || []).join("; ")}\n`
+    : "";
   $("out").textContent = `match ${r.match?.match_id}  ${r.match?.game}/${r.match?.platform}\n` +
-    `final: away ${res.away_score} @ home ${res.home_score} (Q${res.quarter}), winner ${res.winner}\n\n` + JSON.stringify(v, null, 2);
+    `final: away ${res.away_score} @ home ${res.home_score} (Q${res.quarter}), winner ${res.winner}\n` + basis + "\n" + JSON.stringify(v, null, 2);
   watchReceipt();
 };
 </script></body></html>

@@ -4,6 +4,7 @@
 
 - **Capture.** [QorCap](https://github.com/ConWan30/qorcap) is the single lightweight Windows app you run during the match. It records the capture card and fingerprints the video (a hash chain plus timestamped checkpoints). Logging controller button presses from the same session is **coming in v0.3**.
 - **Prove.** After the match, QorTime works on the finished recording, not during play. It produces the signed receipt, then the [AI referee](docs/REFEREE_AI.md) (`qortime referee-ai <bundle>`) signs an **accept / dispute / abstain** verdict with plain reasons and evidence frames.
+- **Verify (official).** `qorcap submit` / "Submit for Verification" uploads the bundle to the [QorTime official referee](docs/REFEREE_SERVICE.md), which re-checks hash chains, video bytes (spot-check or full), the end-of-game score and challenges on its own, and only then countersigns with the official key, so the receipt can be **VERIFIED** instead of SELF_ATTESTED.
 - **Share.** Anyone can check the receipt in the [browser verifier](https://conwan30.github.io/qortime/verify/) or with `qortime verify`, and the referee verdict with `qortime referee-ai-verify`.
 
 Honest limit: QorTime proves the footage's integrity and timing (and, from v0.3, the controller inputs). It does not prove who held the controller.

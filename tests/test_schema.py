@@ -31,3 +31,9 @@ def test_end_menu_read_result_matches_schema():
     rec["result"]["method"] = "made_up"
     with pytest.raises(jsonschema.ValidationError):
         jsonschema.validate(rec, schema)
+
+
+def test_review_receipt_matches_schema():
+    schema = json.loads((ROOT / "schema" / "receipt.v0.json").read_text())
+    v = json.loads((ROOT / "tests" / "vectors" / "review_receipt.json").read_text())
+    jsonschema.validate(v["receipt"], schema)

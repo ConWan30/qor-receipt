@@ -12,16 +12,22 @@ const RESULT_METHODS = new Set(["agreed_scorebug_final", "end_menu_read", "last_
 const ROLES = new Set(["home", "away"]);
 const LOCAL_REFEREE_PREFIXES = ["local-self-attested"];
 const UNVERIFIED_KIND_CLAIMS = new Set(["tpm"]);
+// Official post-hoc review receipts (qor_receipt/review/policy.py).
+export const REVIEW_KEY_KIND = "qortime-official-review";
+export const REVIEW_TYPE = "qortime-bundle-review/v1";
+export const CHALLENGE_TOKEN_TYPE = "qortime-challenge/v1";
+const CHECK_STATES = new Set(["pass", "partial", "fail"]);
+const REQUIRED_REVIEW_CHECKS = ["video_bytes", "final_reread", "capture_chain", "bundle_structure"];
 const enc = new TextEncoder();
 
 export function loadAllowlist() { return TRUSTED_REFEREES; }
-export function lookupReferee(pubkey) {
+export function lookupReferee(pubkey, allowlist = TRUSTED_REFEREES) {
   if (!pubkey || typeof pubkey !== "string") return null;
   const want = pubkey.toLowerCase();
-  return (TRUSTED_REFEREES.referees || []).find((r) => String(r.pubkey || "").toLowerCase() === want) || null;
+  return ((allowlist || {}).referees || []).find((r) => String(r.pubkey || "").toLowerCase() === want) || null;
 }
-export function isTrustedActive(pubkey) {
-  const row = lookupReferee(pubkey);
+export function isTrustedActive(pubkey, allowlist = TRUSTED_REFEREES) {
+  const row = lookupReferee(pubkey, allowlist);
   return !!(row && row.status === "active");
 }
 
@@ -120,6 +126,42 @@ export function challengeEvidenceErrors(c, cps) {
 }
 
 
+const isHex64 = (v) => typeof v === "string" && /^[0-9a-fA-F]{64}$/.test(v);
+
+// Review receipts: the nonce must come from a token signed by an allowlisted active referee key for exactly this
+// nonce / phase / window. Mirrors receipt.official_challenge_ok.
+export async function officialChallengeOk(c, allowlist = TRUSTED_REFEREES) {
+  const tok = c && c.issuer;
+  if (!tok || typeof tok !== "object" || tok.type !== CHALLENGE_TOKEN_TYPE || typeof tok.sig !== "string") return false;
+  for (const k of ["nonce", "phase", "issued_ms", "deadline_ms"]) if (tok[k] !== c[k]) return false;
+  const payload = enc.encode(canonicalize(without(tok, "sig")));
+  for (const row of (allowlist || {}).referees || []) {
+    const pub = String(row.pubkey || "").toLowerCase();
+    if (row.status === "active" && tok.key_id === (await kid(pub)) && (await edVerify(pub, tok.sig, payload))) return true;
+  }
+  return false;
+}
+
+export function reviewProblems(r, ref) {
+  const rv = r.review;
+  if (!rv || typeof rv !== "object" || rv.type !== REVIEW_TYPE) return { cap: null, errors: ["review_missing_or_wrong_type"], partial: [] };
+  const errors = [], partial = [];
+  let cap = (rv.capture_referee || {}).pubkey;
+  if (!isHex64(cap)) { errors.push("review_capture_referee_missing"); cap = null; }
+  else if (cap.toLowerCase() === String(ref.pubkey || "").toLowerCase()) errors.push("review_capture_referee_is_official_key");
+  let checks = rv.checks;
+  if (!checks || typeof checks !== "object" || !Object.keys(checks).length) { errors.push("review_checks_missing"); checks = {}; }
+  for (const name of REQUIRED_REVIEW_CHECKS) if (!(name in checks)) errors.push(`review_check_missing:${name}`);
+  for (const name of Object.keys(checks).sort()) {
+    const c = checks[name];
+    const st = c && typeof c === "object" ? c.state : undefined;
+    if (!CHECK_STATES.has(st)) errors.push(`review_check_bad_state:${name}`);
+    else if (st === "fail") errors.push(`review_check_failed:${name}`);
+    else if (st === "partial") partial.push(`review_partial:${name}`);
+  }
+  return { cap, errors, partial };
+}
+
 const INPUT_HUMAN_MIN = 400;
 const INPUT_ALIGN_EDGE = 50;
 const INPUT_HAPTIC_MIN = 1;
@@ -153,7 +195,9 @@ export function inputProofAdvisory(signals) {
            claims: "advisory evidence only — not cryptographic proof of a human player" };
 }
 
-export async function verifyReceipt(r, refereePub = null) {
+export async function verifyReceipt(r, refereePub = null, opts = {}) {
+  const allowlist = (opts && opts.allowlist) || TRUSTED_REFEREES;
+  let reviewMode = false;
   const errors = [], partial = [];
   let tier = null;
   let trustedRef = false;
@@ -168,7 +212,7 @@ export async function verifyReceipt(r, refereePub = null) {
     const rs = sigs.referee;
     if (!rs || rs.key_id !== (await kid(ref.pubkey)) || !(await edVerify(ref.pubkey, rs.sig, msg))) errors.push("bad_referee_signature");
 
-    refereeEntry = lookupReferee(ref.pubkey);
+    refereeEntry = lookupReferee(ref.pubkey, allowlist);
     if (refereeEntry && refereeEntry.status === "active") trustedRef = true;
     else if (refereeEntry && refereeEntry.status === "revoked") partial.push(`referee_revoked:${refereeEntry.id}`);
     else partial.push("referee_not_on_allowlist");
@@ -193,6 +237,15 @@ export async function verifyReceipt(r, refereePub = null) {
       if (UNVERIFIED_KIND_CLAIMS.has(p.key_kind)) partial.push(`${role}:key_kind_claim_unverified:${p.key_kind}`);
     }
 
+    let chainPub = ref.pubkey;
+    reviewMode = ref.key_kind === REVIEW_KEY_KIND;
+    if (reviewMode) {
+      const rp = reviewProblems(r, ref);
+      errors.push(...rp.errors);
+      partial.push(...rp.partial);
+      if (rp.cap) chainPub = rp.cap;
+    }
+
     const m = r.match;
     if (m.mode === "dual" && !(rolesSeen.has("home") && rolesSeen.has("away") && rolesSeen.size === 2)) {
       errors.push("dual_missing_roles");
@@ -211,7 +264,7 @@ export async function verifyReceipt(r, refereePub = null) {
         break;
       }
     }
-    if (refereePub != null && !isTrustedActive(refereePub)) {
+    if (refereePub != null && !isTrustedActive(refereePub, allowlist)) {
       trustedRef = false;
       if (!partial.includes("referee_pin_not_allowlisted")) partial.push("referee_pin_not_allowlisted");
     }
@@ -219,7 +272,7 @@ export async function verifyReceipt(r, refereePub = null) {
     for (const p of players) {
       const role = p.role;
       if (!ROLES.has(role)) continue;
-      for (const e of await verifyChain(r.checkpoints[role], m.match_id, role, ref.pubkey, m.started_ms, m.ended_ms)) errors.push(`${role}:${e}`);
+      for (const e of await verifyChain(r.checkpoints[role], m.match_id, role, chainPub, m.started_ms, m.ended_ms)) errors.push(`${role}:${e}`);
       for (const ph of PHASES) {
         const cs = r.challenges.filter((c) => c.role === role && c.phase === ph);
         if (!cs.length) partial.push(`${role}:challenge_missing:${ph}`);
@@ -230,7 +283,9 @@ export async function verifyReceipt(r, refereePub = null) {
           if (c.result == null) partial.push(`${role}:challenge_unanswered:${ph}`);
           else if (!c.result.ok) errors.push(`${role}:${ph}:challenge_failed:${c.result.reason}`);
           else {
-            for (const e of challengeEvidenceErrors(c, r.checkpoints[role])) partial.push(`${role}:${ph}:${e}`);
+            const evErrs = challengeEvidenceErrors(c, r.checkpoints[role]);
+            if (reviewMode && !(await officialChallengeOk(c, allowlist))) evErrs.push("challenge_nonce_not_official");
+            for (const e of evErrs) partial.push(`${role}:${ph}:${e}`);
           }
         }
       }
@@ -262,5 +317,11 @@ export async function verifyReceipt(r, refereePub = null) {
     input_advisory: inputAdvisory,
   };
   if (refereeEntry) out.referee_id = refereeEntry.id;
+  if (reviewMode && r.review && typeof r.review === "object") {
+    const vb = (((r.review.checks || {}).video_bytes || {}).detail) || {};
+    out.verification_basis = "official-post-hoc-review";
+    out.review = { scope: r.review.scope, video_method: vb.method ?? null, segments_verified: vb.segments_verified ?? null,
+                   segments_total: vb.segments_total ?? null, not_proven: r.review.not_proven };
+  }
   return out;
 }

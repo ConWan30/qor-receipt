@@ -1,0 +1,9 @@
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "services/referee/Dockerfile"
+watchPatterns = ["qor_receipt/**", "services/referee/**", "pyproject.toml"]
+
+[deploy]
+healthcheckPath = "/health"
+healthcheckTimeout = 60
+restartPolicyType = "ON_FAILURE"
