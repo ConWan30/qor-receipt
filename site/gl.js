@@ -5,7 +5,7 @@ const clamp01 = t => Math.min(Math.max(t, 0), 1);
 
 export function init(canvas, { fine }) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(Math.min(devicePixelRatio, 1.75));
+  renderer.setPixelRatio(Math.min(devicePixelRatio, fine ? 1.75 : 1.5)); // phones: ~27% fewer pixels for the full-screen hero
   const scene = new THREE.Scene();
   const cam = new THREE.PerspectiveCamera(35, 1, .1, 100); cam.position.set(0, 0, 11);
   const root = new THREE.Group(); scene.add(root);
