@@ -424,3 +424,31 @@ def test_challenge_ok_without_evidence_is_partial():
     v = verify_receipt(body, referee_pub=ref_key.pubkey_hex)
     assert v["status"] == PARTIAL
     assert any("challenge_missing_hid_sha256" in p for p in v["partial"])
+
+
+def test_input_proof_advisory_signals():
+    from qor_receipt.receipt import _input_proof_advisory, verify_receipt
+    from qor_receipt.demo import demo_receipt
+
+    assert _input_proof_advisory({}) is None
+    assert _input_proof_advisory({"motion_permille": {"home": 1}}) is None
+    good = {"input": {
+        "status": "ok", "human_permille": 720, "human_label": "human-like",
+        "match_permille": 610, "chance_permille": 200, "offset_ms": 40,
+        "haptic_events": 12, "haptic_high_confidence": 8,
+        "inputs_sha256": "a" * 64, "inputs_chain_head": "b" * 64,
+    }}
+    adv = _input_proof_advisory(good)
+    assert adv and adv["ok"] and adv["flags"] == []
+    weak = {"input": {
+        "status": "ok", "human_permille": 100, "match_permille": 100, "chance_permille": 200,
+        "haptic_events": 0, "haptic_high_confidence": 0,
+    }}
+    adv2 = _input_proof_advisory(weak)
+    assert adv2 and not adv2["ok"]
+    assert "human_score_low" in adv2["flags"] and "alignment_not_above_chance" in adv2["flags"]
+    assert "no_haptic_events" in adv2["flags"]
+
+    rec, pub = demo_receipt("dual")
+    v = verify_receipt(rec, referee_pub=pub)
+    assert "input_advisory" in v and v["input_advisory"] is None  # demo has no signals.input
