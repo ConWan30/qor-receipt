@@ -37,7 +37,8 @@ pre{background:#161b22;padding:.75rem;border-radius:6px;white-space:pre-wrap}sma
 <p><small>Signature checks run in this browser. The receipt JSON is not uploaded. The Verified Match badge sends only the receipt id to the test checkout service. That badge is TEST / early access until KYC. It is not a live paid product.</small></p>
 <div class="verdicts">
  <p><b class="VERIFIED">VERIFIED</b> — every signature, checkpoint, and challenge holds against the pinned referee key.</p>
- <p><b class="PARTIAL">PARTIAL</b> — signatures that are present check out, and something is missing (often an unpinned referee key or a skipped challenge).</p>
+ <p><b class="PARTIAL">PARTIAL</b> — signatures check out against a <em>trusted</em> QorTime referee, but something is missing (challenge, motion, …).</p>
+ <p><b style="color:#ffb000">SELF_ATTESTED</b> — cryptography holds, but the referee key is <strong>not</strong> on QorTime's built-in trusted list (local Start Match key, home-made key, or revoked). Never shown as VERIFIED.</p>
  <p><b class="FAIL">FAIL</b> — a signature, the chain, or a challenge does not hold.</p>
 </div>
 <section class="vm" id="vm">
@@ -67,7 +68,7 @@ const q = new URLSearchParams(location.search);
     $("pub").value = q.get("referee");
     const warn = document.createElement("p");
     warn.style.cssText = "color:#ffb000;font-size:.9rem;margin:.4rem 0 0";
-    warn.textContent = "Warning: the pinned referee key was filled from the URL (?referee=). Only trust this if you chose that key yourself — a cheater can send a link that pins their own key and make a forged receipt look VERIFIED.";
+    warn.textContent = "Warning: the pinned referee key was filled from the URL (?referee=). That pin never yields VERIFIED unless the key is already on QorTime's built-in trusted-referee allowlist. A cheater can send a link that pins their own key — the result will be SELF_ATTESTED at best.";
     $("pub").parentNode.insertBefore(warn, $("pub").nextSibling);
   }
 let pollTimer = 0;
@@ -178,7 +179,7 @@ $("go").onclick = async () => {
   let r; try { r = JSON.parse($("json").value); } catch { $("badge").className = "FAIL"; $("badge").textContent = "FAIL: not JSON"; return; }
   const v = await verifyReceipt(r, $("pub").value.trim() || null);
   $("badge").className = v.status;
-  $("badge").innerHTML = `${v.status}<span class="tier">${v.trust_tier ?? "no tier"}</span>`;
+  $("badge").innerHTML = `${v.status}<span class="tier">${v.trust_tier ?? "no tier"} · referee ${v.referee_trust ?? "?"}${v.referee_id ? " ("+v.referee_id+")" : ""}</span>`;
   const res = r.result || {};
   $("out").hidden = false;
   $("out").textContent = `match ${r.match?.match_id}  ${r.match?.game}/${r.match?.platform}\n` +

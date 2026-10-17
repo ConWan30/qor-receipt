@@ -24,7 +24,8 @@ qortime = "qor_receipt.cli:main"
 include = ["qor_receipt*"]
 
 [tool.setuptools.package-data]
-"*" = ["*.npz", "*.md", "*.jpg", "*.png"]
+"*" = ["*.npz", "*.md", "*.jpg", "*.png", "*.json"]
+"qor_receipt.data" = ["*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -3,7 +3,9 @@
 Signed bytes = JCS(receipt without "signatures"). Every listed player and the
 referee sign the same bytes. Verdicts follow the QorTroller PORT-CERT honesty
 rule: any broken evidence => FAIL; missing evidence => PARTIAL; VERIFIED only
-when everything was checked. The trust tier is computed, never trusted.
+when everything was checked **and** the referee pubkey is on the built-in
+trusted-referee allowlist. Unknown / local / URL-pinned keys are at most
+SELF_ATTESTED. The trust tier is computed, never trusted.
 """
 from __future__ import annotations
 
@@ -15,15 +17,14 @@ from qor_receipt.challenge import DEFAULT_LEN, PHASES, pattern_for
 from qor_receipt.checkpoints import verify_chain
 from qor_receipt.jcs import canonicalize
 from qor_receipt.keys import KeyProvider, kid, verify  # noqa: F401
+from qor_receipt.trusted_referees import is_trusted_active, lookup
 
-VERIFIED, PARTIAL, FAIL = "VERIFIED", "PARTIAL", "FAIL"
+VERIFIED, PARTIAL, SELF_ATTESTED, FAIL = "VERIFIED", "PARTIAL", "SELF_ATTESTED", "FAIL"
 DUAL, SINGLE = "dual-attested", "single-attested"
 MOTION_MIN_PERMILLE = 300
 RESULT_METHODS = frozenset({"agreed_scorebug_final", "end_menu_read", "last_scorebug_read_unconfirmed"})
 ROLES = frozenset({"home", "away"})
-# Referee kinds that mean "the same machine signed as referee" — never VERIFIED.
 LOCAL_REFEREE_PREFIXES = ("local-self-attested",)
-# key_kind values that claim hardware/attestation we cannot check in v0 → PARTIAL.
 UNVERIFIED_KIND_CLAIMS = frozenset({"tpm"})
 
 
@@ -64,12 +65,16 @@ def _is_nonneg_int(v: Any) -> bool:
     return isinstance(v, int) and not isinstance(v, bool) and v >= 0
 
 
-def verify_receipt(r: dict[str, Any], *, referee_pub: str | None = None) -> dict[str, Any]:
+def verify_receipt(r: dict[str, Any], *, referee_pub: str | None = None,
+                   allowlist_path: str | None = None) -> dict[str, Any]:
     errors: list[str] = []
     partial: list[str] = []
+    trusted_ref = False
+    referee_entry: dict[str, Any] | None = None
     try:
         if r.get("schema") != SCHEMA:
-            return {"status": FAIL, "trust_tier": None, "errors": ["schema"], "partial": []}
+            return {"status": FAIL, "trust_tier": None, "errors": ["schema"], "partial": [],
+                    "referee_trust": "unknown"}
         msg = signing_bytes(r)
         sigs = r.get("signatures") or {}
         ref = r["referee"]
@@ -80,6 +85,14 @@ def verify_receipt(r: dict[str, Any], *, referee_pub: str | None = None) -> dict
         rs = sigs.get("referee")
         if not rs or rs.get("key_id") != kid(ref["pubkey"]) or not verify(ref["pubkey"], rs["sig"], msg):
             errors.append("bad_referee_signature")
+
+        referee_entry = lookup(ref["pubkey"], path=allowlist_path)
+        if referee_entry and referee_entry.get("status") == "active":
+            trusted_ref = True
+        elif referee_entry and referee_entry.get("status") == "revoked":
+            partial.append(f"referee_revoked:{referee_entry.get('id')}")
+        else:
+            partial.append("referee_not_on_allowlist")
 
         players = r.get("players")
         if not isinstance(players, list) or not players:
@@ -110,13 +123,21 @@ def verify_receipt(r: dict[str, Any], *, referee_pub: str | None = None) -> dict
         ref_kind = str(ref.get("key_kind") or "")
         if any(ref_kind.startswith(p) for p in LOCAL_REFEREE_PREFIXES):
             partial.append("referee_local_self_attested")
+            trusted_ref = False  # local referee is never the official allowlisted operator key in spirit
         if ref_kind in UNVERIFIED_KIND_CLAIMS:
             partial.append(f"referee_key_kind_claim_unverified:{ref_kind}")
-        # Same key signing as both referee and a player = self-attested, not independent.
         for p in players:
             if p.get("role") in ROLES and p.get("pubkey", "").lower() == ref.get("pubkey", "").lower():
                 partial.append("referee_same_as_player")
+                trusted_ref = False
                 break
+
+        # Pin must be an allowlisted active key for VERIFIED. A URL/?referee= pin of an
+        # unknown key never upgrades trust (loud warning is UI-side).
+        if referee_pub is not None and not is_trusted_active(referee_pub, path=allowlist_path):
+            trusted_ref = False
+            if "referee_pin_not_allowlisted" not in partial:
+                partial.append("referee_pin_not_allowlisted")
 
         for p in players:
             role = p.get("role")
@@ -165,5 +186,19 @@ def verify_receipt(r: dict[str, Any], *, referee_pub: str | None = None) -> dict
     except (KeyError, TypeError, ValueError, AttributeError) as e:
         errors.append(f"malformed:{type(e).__name__}")
         tier = None
-    status = FAIL if errors else (PARTIAL if partial else VERIFIED)
-    return {"status": status, "trust_tier": tier, "errors": errors, "partial": partial}
+        trusted_ref = False
+
+    if errors:
+        status = FAIL
+    elif not trusted_ref:
+        status = SELF_ATTESTED
+    elif partial:
+        status = PARTIAL
+    else:
+        status = VERIFIED
+
+    out = {"status": status, "trust_tier": tier, "errors": errors, "partial": partial,
+           "referee_trust": ("active" if trusted_ref else ("revoked" if referee_entry and referee_entry.get("status") == "revoked" else "untrusted"))}
+    if referee_entry:
+        out["referee_id"] = referee_entry.get("id")
+    return out

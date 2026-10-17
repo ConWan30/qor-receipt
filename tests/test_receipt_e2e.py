@@ -7,34 +7,40 @@ import pytest
 from qor_receipt.cli import main
 from qor_receipt.demo import run_match
 from qor_receipt.keys import SoftwareKey
-from qor_receipt.receipt import DUAL, FAIL, PARTIAL, SINGLE, VERIFIED, sign_player, verify_receipt
+from qor_receipt.receipt import DUAL, FAIL, SELF_ATTESTED, SINGLE, VERIFIED, sign_player, verify_receipt
 
 
 def test_dual_verified(ref):
     client, clock, key = ref
     rec, _ = run_match(client, clock, "dual")
     v = verify_receipt(rec, referee_pub=key.pubkey_hex)
-    assert v == {"status": VERIFIED, "trust_tier": DUAL, "errors": [], "partial": []}
+    assert v["status"] == SELF_ATTESTED and v["trust_tier"] == DUAL and v["errors"] == []
+    assert "referee_not_on_allowlist" in v["partial"]
 
 
 def test_single_tier(ref):
     client, clock, key = ref
     rec, _ = run_match(client, clock, "single")
     v = verify_receipt(rec, referee_pub=key.pubkey_hex)
-    assert v["status"] == VERIFIED and v["trust_tier"] == SINGLE
+    assert v["status"] == SELF_ATTESTED and v["trust_tier"] == SINGLE
 
 
-def test_unpinned_is_partial(ref):
+def test_unpinned_is_self_attested(ref):
     client, clock, _ = ref
     rec, _ = run_match(client, clock)
-    assert verify_receipt(rec)["status"] == PARTIAL
+    v = verify_receipt(rec)
+    assert v["status"] == SELF_ATTESTED
+    assert "referee_key_not_pinned" in v["partial"]
 
 
-def test_missing_challenge_partial(ref):
+def test_missing_challenge_untrusted_is_self_attested(ref):
+    """Ephemeral referee + missing challenge: never VERIFIED; SELF_ATTESTED (untrusted) wins over PARTIAL."""
     client, clock, key = ref
     rec, _ = run_match(client, clock, skip_phase="halftime")
     v = verify_receipt(rec, referee_pub=key.pubkey_hex)
-    assert v["status"] == PARTIAL and "home:challenge_missing:halftime" in v["partial"]
+    assert v["status"] == SELF_ATTESTED
+    assert "home:challenge_missing:halftime" in v["partial"]
+    assert "referee_not_on_allowlist" in v["partial"]
 
 
 def test_replayed_pattern_fails(ref):
@@ -113,15 +119,15 @@ def test_cli_roundtrip(tmp_path, capsys):
     out = tmp_path / "r.json"
     assert main(["emit", "--demo", str(out)]) == 0
     pub = json.loads(capsys.readouterr().out)["referee_pub"]
-    assert main(["verify", str(out), "--referee-pub", pub]) == 0
-    assert main(["verify", str(out)]) == 1
+    assert main(["verify", str(out), "--referee-pub", pub]) == 0  # SELF_ATTESTED (crypto ok; not allowlisted)
+    assert main(["verify", str(out)]) == 0  # SELF_ATTESTED unpinned
     r = json.loads(out.read_text()); r["result"]["away_score"] = 30; out.write_text(json.dumps(r))
     assert main(["verify", str(out), "--referee-pub", pub]) == 2
 
 
 def test_shared_vector_still_verifies():
     d = json.loads((Path(__file__).parent / "vectors" / "demo_receipt_dual.json").read_text())
-    assert verify_receipt(d["receipt"], referee_pub=d["referee_pub"])["status"] == VERIFIED
+    assert verify_receipt(d["receipt"], referee_pub=d["referee_pub"])["status"] == SELF_ATTESTED
 
 
 def test_empty_players_fails(ref):
@@ -145,7 +151,7 @@ def test_local_self_attested_caps_partial(ref):
     """A local-self-attested referee must never reach VERIFIED (attacker holds that key)."""
     from qor_receipt.demo import run_match
     from qor_receipt.keys import SoftwareKey
-    from qor_receipt.receipt import PARTIAL, sign_player, sign_referee, verify_receipt
+    from qor_receipt.receipt import sign_player, sign_referee, verify_receipt
 
     client, clock, _ = ref
     rec, _ = run_match(client, clock, "single")
@@ -193,7 +199,7 @@ def test_local_self_attested_caps_partial(ref):
     body = sign_referee(body, ref_key)
     body = sign_player(body, "home", player)
     v = verify_receipt(body, referee_pub=ref_key.pubkey_hex)
-    assert v["status"] == PARTIAL
+    assert v["status"] == SELF_ATTESTED
     assert "referee_local_self_attested" in v["partial"]
 
 
@@ -250,7 +256,7 @@ def test_tpm_claim_is_partial(ref):
     from qor_receipt.challenge import new_nonce, pattern_for
     from qor_receipt.checkpoints import Chain, countersign, window_hash
     from qor_receipt.keys import SoftwareKey
-    from qor_receipt.receipt import PARTIAL, sign_player, sign_referee, verify_receipt
+    from qor_receipt.receipt import sign_player, sign_referee, verify_receipt
 
     ref_key, player = SoftwareKey(), SoftwareKey()
     mid, start = "m-tpm", 1_800_000_000_000
@@ -280,7 +286,7 @@ def test_tpm_claim_is_partial(ref):
     body = sign_referee(body, ref_key)
     body = sign_player(body, "home", player)
     v = verify_receipt(body, referee_pub=ref_key.pubkey_hex)
-    assert v["status"] == PARTIAL
+    assert v["status"] == SELF_ATTESTED
     assert "home:key_kind_claim_unverified:tpm" in v["partial"]
     assert "referee_key_kind_claim_unverified:tpm" in v["partial"]
 
@@ -322,3 +328,53 @@ def test_short_challenge_pattern_fails(ref):
     v = verify_receipt(body, referee_pub=ref_key.pubkey_hex)
     assert v["status"] == FAIL
     assert any("pattern_too_short" in e for e in v["errors"])
+
+
+def test_official_allowlisted_referee_can_be_verified():
+    """Sign with the operator key from /workspace/qortime-keys — only then is VERIFIED possible."""
+    from pathlib import Path
+
+    from qor_receipt import receipt as R
+    from qor_receipt.challenge import new_nonce, pattern_for
+    from qor_receipt.checkpoints import Chain, countersign, window_hash
+    from qor_receipt.keys import SoftwareKey
+    from qor_receipt.receipt import sign_player, sign_referee, verify_receipt
+    from qor_receipt.trusted_referees import is_trusted_active
+
+    key_path = Path("/workspace/qortime-keys/qortime-referee-v1.key")
+    if not key_path.exists():
+        import pytest
+        pytest.skip("official referee private key not present on this box")
+    ref_key = SoftwareKey.from_seed_hex(key_path.read_text().strip())
+    assert is_trusted_active(ref_key.pubkey_hex)
+    player = SoftwareKey()
+    mid, start = "m-official", 1_800_000_000_000
+    end = start + 20_000
+    ch, cps, t_ms = Chain(), [], start
+    while t_ms <= end:
+        cp = ch.next(t_ms, window_hash([b"off"]), window_hash([]))
+        cps.append(countersign(ref_key, mid, "home", cp, t_ms + 50))
+        t_ms += 4_000
+    chal = []
+    for i, ph in enumerate(("kickoff", "halftime", "end")):
+        n = new_nonce(); iss = start + i * 5_000
+        chal.append({"id": f"c{i}", "role": "home", "phase": ph, "nonce": n, "pattern": pattern_for(n),
+                     "issued_ms": iss, "deadline_ms": iss + 20_000,
+                     "result": {"ok": True, "reason": "ok", "pause_press_ms": iss + 100, "done_ms": iss + 1000,
+                                "latency_ms": 50, "hid_sha256": "0" * 64}})
+    body = R.build(
+        match={"match_id": mid, "game": "madden27", "platform": "ps5", "scorebug_profile": "madden27_standard",
+               "mode": "single", "started_ms": start, "ended_ms": end},
+        result={"home_score": 24, "away_score": 17, "quarter": 4, "final_t_ms": end - 100,
+                "winner": "home", "method": "agreed_scorebug_final"},
+        players=[{"role": "home", "player_id": "p", "pubkey": player.pubkey_hex, "key_kind": "software"}],
+        referee={"pubkey": ref_key.pubkey_hex, "key_id": ref_key.key_id, "key_kind": "software"},
+        challenges=chal, checkpoints={"home": cps},
+        agreement={"timelines_agree": None, "mismatches": []},
+        signals={"motion_permille": {"home": 800}},
+    )
+    body = sign_referee(body, ref_key)
+    body = sign_player(body, "home", player)
+    v = verify_receipt(body, referee_pub=ref_key.pubkey_hex)
+    assert v["status"] == VERIFIED, v
+    assert v["referee_trust"] == "active" and v["referee_id"] == "qortime-v1"

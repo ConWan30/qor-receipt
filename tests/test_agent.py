@@ -11,7 +11,7 @@ from qor_receipt.agent.hid import HidDecoder, pack_usb_report, parse_report  # n
 from qor_receipt.agent.pause_detect import PauseDetector, PauseThresholds  # noqa: E402
 from qor_receipt.agent.runner import run_replay  # noqa: E402
 from qor_receipt.cli import main  # noqa: E402
-from qor_receipt.receipt import FAIL, VERIFIED, verify_receipt  # noqa: E402
+from qor_receipt.receipt import FAIL, SELF_ATTESTED, verify_receipt  # noqa: E402
 
 
 @pytest.fixture(scope="module")
@@ -136,7 +136,8 @@ def test_fixture_strips_read():
 # ---- end to end replay
 def test_replay_end_to_end_verified(session, tmp_path):
     r = run_replay(session["frames_dir"], session["hid_log"])
-    assert r["verify"] == {"status": VERIFIED, "trust_tier": "single-attested", "errors": [], "partial": []}
+    assert r["verify"]["status"] == SELF_ATTESTED and r["verify"]["trust_tier"] == "single-attested"
+    assert r["verify"]["errors"] == [] and "referee_not_on_allowlist" in r["verify"]["partial"]
     rec = r["receipt"]
     assert (rec["result"]["home_score"], rec["result"]["away_score"], rec["result"]["winner"]) == (24, 21, "home")  # strip shows ATL-style away 21 (left) @ home 24 (right)
     assert [c["phase"] for c in rec["challenges"]] == ["kickoff", "halftime", "end"]
@@ -164,15 +165,15 @@ def test_replay_late_video_fails(tmp_path):
 
 def test_cli_replay_and_verify(session, tmp_path, capsys):
     out = tmp_path / "r.json"
-    assert main(["agent", "--replay", session["frames_dir"], "--hid-log", session["hid_log"], "--out", str(out)]) == 0
+    assert main(["agent", "--replay", session["frames_dir"], "--hid-log", session["hid_log"], "--out", str(out)]) == 0  # SELF_ATTESTED
     info = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
-    assert info["verify"]["status"] == VERIFIED
-    assert main(["verify", str(out), "--referee-pub", info["referee_pub"]]) == 0
+    assert info["verify"]["status"] == SELF_ATTESTED
+    assert main(["verify", str(out), "--referee-pub", info["referee_pub"]]) == 0  # SELF_ATTESTED
 
 
 def test_committed_replay_vector_verifies():
     v = json.loads((STRIPS.parents[3] / "tests" / "vectors" / "agent_replay_receipt.json").read_text())
-    assert verify_receipt(v["receipt"], referee_pub=v["referee_pub"])["status"] == VERIFIED
+    assert verify_receipt(v["receipt"], referee_pub=v["referee_pub"])["status"] == SELF_ATTESTED
 
 
 def test_agent_scorebug_gone_final():
