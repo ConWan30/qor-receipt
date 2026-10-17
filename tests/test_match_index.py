@@ -103,3 +103,19 @@ def test_burst_frames_from_video(tmp_path):
     assert len(sc["frames"]) == 10 and all(f["ok"] for f in sc["frames"]) and sc["contact_sheet"]
     assert sc["frames"][0]["dt_s"] == -3.0 and sc["frames"][-1]["dt_s"] == 2.0
     assert "data:image/jpeg;base64," in (tmp_path / "o" / "viewer.html").read_text()
+
+
+def test_viewer_template_renders_self_contained(tmp_path):
+    from qor_receipt.match_index.viewer import TEMPLATE, write_viewer
+    assert "__DATA__" in TEMPLATE and "__TITLE__" in TEMPLATE
+    idx = {"match_id": "m</script><b>", "events": [{"kind": "score_change", "t_ms": W0, "score_before": None, "score_after": {"away": 0, "home": 7},
+                                                    "locked": True, "frames": [{"file": "events/x/frame_00.jpg", "dt_s": 0.0}]}],
+           "result": {"final": None, "final_confirmed": False}, "chain": {}, "input_summary": {}, "video": {}, "missing": ["bundle.final"]}
+    html = write_viewer(idx, tmp_path).read_text()
+    assert "__DATA__" not in html and "__TITLE__" not in html
+    assert "</script><b>" not in html.split("<script>", 1)[1].rsplit("</script>", 1)[0]  # data blob cannot break out
+    assert "m&lt;/script&gt;&lt;b&gt;" in html  # title escaped
+    assert "prefers-reduced-motion" in html and "advisory evidence" in html.lower() and "not proof" in html
+    assert '"src": null' in html  # missing frame file stays missing, never fabricated
+    for ext in ("http://", "https://", "<link", "@import", "src=\"//"):
+        assert ext not in html.replace("http://www.w3.org/2000/svg", "")
