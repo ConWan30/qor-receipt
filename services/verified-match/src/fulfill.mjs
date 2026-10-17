@@ -28,8 +28,16 @@ export function siteOrigin(env) {
   return raw;
 }
 
-export function buildCheckoutParams(receiptId, { priceId, site }) {
+export function buildCheckoutParams(receiptId, { priceId, site, receiptSha256 = null }) {
   const root = site.replace(/\/$/, "");
+  const meta = {
+    receipt_id: receiptId,
+    product: "verified_match",
+    mode: "test",
+  };
+  if (typeof receiptSha256 === "string" && /^[0-9a-f]{64}$/i.test(receiptSha256)) {
+    meta.receipt_sha256 = receiptSha256.toLowerCase();
+  }
   return {
     mode: "payment",
     ui_mode: "hosted_page",
@@ -37,15 +45,12 @@ export function buildCheckoutParams(receiptId, { priceId, site }) {
     adaptive_pricing: { enabled: true },
     line_items: [{ price: priceId, quantity: 1 }],
     client_reference_id: receiptId,
-    metadata: {
-      receipt_id: receiptId,
-      product: "verified_match",
-      mode: "test",
-    },
+    metadata: meta,
     payment_intent_data: {
       metadata: {
         receipt_id: receiptId,
         product: "verified_match",
+        ...(meta.receipt_sha256 ? { receipt_sha256: meta.receipt_sha256 } : {}),
       },
     },
     success_url: `${root}/verify/?checkout=success&receipt_id=${encodeURIComponent(receiptId)}&session_id={CHECKOUT_SESSION_ID}`,

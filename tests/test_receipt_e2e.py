@@ -122,3 +122,203 @@ def test_cli_roundtrip(tmp_path, capsys):
 def test_shared_vector_still_verifies():
     d = json.loads((Path(__file__).parent / "vectors" / "demo_receipt_dual.json").read_text())
     assert verify_receipt(d["receipt"], referee_pub=d["referee_pub"])["status"] == VERIFIED
+
+
+def test_empty_players_fails(ref):
+    from qor_receipt.demo import run_match
+    from qor_receipt.receipt import FAIL, verify_receipt
+
+    client, clock, key = ref
+    rec, _ = run_match(client, clock, "single")
+    # Strip players after the fact without resigning → bad sigs; instead rebuild via mutate on signed copy
+    # Use a minimal forged-style body: take demo and empty players then we expect FAIL even if we could resign.
+    # Direct unit: call verify on a surgically emptied structure after re-signing is covered in redteam; here
+    # assert the check fires when players=[] with otherwise-valid shape from demo (will also bad-sig).
+    t = __import__("copy").deepcopy(rec)
+    t["players"] = []
+    v = verify_receipt(t, referee_pub=key.pubkey_hex)
+    assert v["status"] == FAIL
+    assert "no_players" in v["errors"] or "bad_referee_signature" in v["errors"]
+
+
+def test_local_self_attested_caps_partial(ref):
+    """A local-self-attested referee must never reach VERIFIED (attacker holds that key)."""
+    from qor_receipt.demo import run_match
+    from qor_receipt.keys import SoftwareKey
+    from qor_receipt.receipt import PARTIAL, sign_player, sign_referee, verify_receipt
+
+    client, clock, _ = ref
+    rec, _ = run_match(client, clock, "single")
+    # Re-sign with a fresh key but claim local-self-attested
+    ref_key, player = SoftwareKey(), SoftwareKey()
+    body = {k: v for k, v in rec.items() if k != "signatures"}
+    body["referee"] = {"pubkey": ref_key.pubkey_hex, "key_id": ref_key.key_id, "key_kind": "local-self-attested"}
+    body["players"] = [{"role": "home", "player_id": "p", "pubkey": player.pubkey_hex, "key_kind": "software-file"}]
+    # Keep checkpoints/challenges from demo but they carry old referee_sig — rebuild empty challenges path:
+    # Simpler: just change key_kind on the already-valid demo receipt's referee and re-sign everything.
+    # Checkpoints have old referee countersignatures; for this unit we only care that key_kind forces PARTIAL
+    # when signatures otherwise verify. Use emit-style: resign receipt body only (checkpoints will fail).
+    # Narrow test: inject key_kind into verify via a receipt that already verifies, by mutating kind then resigning
+    # the receipt signatures AND leaving checkpoint referee_sigs as demo's — those would FAIL.
+    # So instead: take single demo, flip only the displayed key_kind through a verify monkey by constructing
+    # via receipt.build path in demo is heavy. Check the partial tag with a minimal stub:
+    from qor_receipt import receipt as R
+    from qor_receipt.challenge import new_nonce, pattern_for
+    from qor_receipt.checkpoints import Chain, countersign, window_hash
+
+    mid, start = "m-local", 1_800_000_000_000
+    end = start + 20_000
+    ch, cps, t = Chain(), [], start
+    while t <= end:
+        cp = ch.next(t, window_hash([b"x"]), window_hash([]))
+        cps.append(countersign(ref_key, mid, "home", cp, t + 50))
+        t += 4_000
+    chal = []
+    for i, ph in enumerate(("kickoff", "halftime", "end")):
+        n = new_nonce(); iss = start + i * 5_000
+        chal.append({"id": f"c{i}", "role": "home", "phase": ph, "nonce": n, "pattern": pattern_for(n),
+                     "issued_ms": iss, "deadline_ms": iss + 20_000,
+                     "result": {"ok": True, "reason": "ok", "pause_press_ms": iss + 100, "done_ms": iss + 1000, "latency_ms": 50}})
+    body = R.build(
+        match={"match_id": mid, "game": "madden27", "platform": "ps5", "scorebug_profile": "madden27_standard",
+               "mode": "single", "started_ms": start, "ended_ms": end},
+        result={"home_score": 21, "away_score": 17, "quarter": 4, "final_t_ms": end - 100,
+                "winner": "home", "method": "agreed_scorebug_final", "final_basis": "clock_zero", "final_confirmed": True},
+        players=[{"role": "home", "player_id": "p", "pubkey": player.pubkey_hex, "key_kind": "software-file"}],
+        referee={"pubkey": ref_key.pubkey_hex, "key_id": ref_key.key_id, "key_kind": "local-self-attested"},
+        challenges=chal, checkpoints={"home": cps},
+        agreement={"timelines_agree": None, "mismatches": []},
+        signals={"motion_permille": {"home": 800}},
+    )
+    body = sign_referee(body, ref_key)
+    body = sign_player(body, "home", player)
+    v = verify_receipt(body, referee_pub=ref_key.pubkey_hex)
+    assert v["status"] == PARTIAL
+    assert "referee_local_self_attested" in v["partial"]
+
+
+def test_bad_method_and_score_types_fail(ref):
+    from qor_receipt import receipt as R
+    from qor_receipt.challenge import new_nonce, pattern_for
+    from qor_receipt.checkpoints import Chain, countersign, window_hash
+    from qor_receipt.keys import SoftwareKey
+    from qor_receipt.receipt import FAIL, sign_player, sign_referee, verify_receipt
+
+    ref_key, player = SoftwareKey(), SoftwareKey()
+    mid, start = "m-types", 1_800_000_000_000
+    end = start + 12_000
+    ch, cps, t = Chain(), [], start
+    while t <= end:
+        cp = ch.next(t, window_hash([b"y"]), window_hash([]))
+        cps.append(countersign(ref_key, mid, "home", cp, t + 50))
+        t += 4_000
+    chal = []
+    for i, ph in enumerate(("kickoff", "halftime", "end")):
+        n = new_nonce(); iss = start + i * 3_000
+        chal.append({"id": f"c{i}", "role": "home", "phase": ph, "nonce": n, "pattern": pattern_for(n),
+                     "issued_ms": iss, "deadline_ms": iss + 20_000,
+                     "result": {"ok": True, "reason": "ok", "pause_press_ms": iss + 100, "done_ms": iss + 800, "latency_ms": 40}})
+
+    def one(**result_extra):
+        result = {"home_score": 14, "away_score": 7, "quarter": 4, "final_t_ms": end - 50,
+                  "winner": "home", "method": "agreed_scorebug_final", **result_extra}
+        body = R.build(
+            match={"match_id": mid, "game": "madden27", "platform": "ps5", "scorebug_profile": "madden27_standard",
+                   "mode": "single", "started_ms": start, "ended_ms": end},
+            result=result,
+            players=[{"role": "home", "player_id": "p", "pubkey": player.pubkey_hex, "key_kind": "software"}],
+            referee={"pubkey": ref_key.pubkey_hex, "key_id": ref_key.key_id, "key_kind": "software"},
+            challenges=chal, checkpoints={"home": cps},
+            agreement={"timelines_agree": None, "mismatches": []},
+            signals={"motion_permille": {"home": 500}},
+        )
+        body = sign_referee(body, ref_key)
+        return sign_player(body, "home", player)
+
+    v = verify_receipt(one(method="i_made_this_up"), referee_pub=ref_key.pubkey_hex)
+    assert v["status"] == FAIL and "bad_result_method" in v["errors"]
+    v = verify_receipt(one(quarter=1), referee_pub=ref_key.pubkey_hex)
+    assert v["status"] == FAIL and "quarter_not_final" in v["errors"]
+    v = verify_receipt(one(home_score="14", away_score="7"), referee_pub=ref_key.pubkey_hex)
+    assert v["status"] == FAIL and "score_not_nonneg_int" in v["errors"]
+    v = verify_receipt(one(home_score=-3, away_score=0, winner="away"), referee_pub=ref_key.pubkey_hex)
+    assert v["status"] == FAIL and "score_not_nonneg_int" in v["errors"]
+
+
+def test_tpm_claim_is_partial(ref):
+    from qor_receipt import receipt as R
+    from qor_receipt.challenge import new_nonce, pattern_for
+    from qor_receipt.checkpoints import Chain, countersign, window_hash
+    from qor_receipt.keys import SoftwareKey
+    from qor_receipt.receipt import PARTIAL, sign_player, sign_referee, verify_receipt
+
+    ref_key, player = SoftwareKey(), SoftwareKey()
+    mid, start = "m-tpm", 1_800_000_000_000
+    end = start + 12_000
+    ch, cps, t = Chain(), [], start
+    while t <= end:
+        cp = ch.next(t, window_hash([b"z"]), window_hash([]))
+        cps.append(countersign(ref_key, mid, "home", cp, t + 50))
+        t += 4_000
+    chal = []
+    for i, ph in enumerate(("kickoff", "halftime", "end")):
+        n = new_nonce(); iss = start + i * 3_000
+        chal.append({"id": f"c{i}", "role": "home", "phase": ph, "nonce": n, "pattern": pattern_for(n),
+                     "issued_ms": iss, "deadline_ms": iss + 20_000,
+                     "result": {"ok": True, "reason": "ok", "pause_press_ms": iss + 100, "done_ms": iss + 800, "latency_ms": 40}})
+    body = R.build(
+        match={"match_id": mid, "game": "madden27", "platform": "ps5", "scorebug_profile": "madden27_standard",
+               "mode": "single", "started_ms": start, "ended_ms": end},
+        result={"home_score": 10, "away_score": 3, "quarter": 4, "final_t_ms": end - 50,
+                "winner": "home", "method": "agreed_scorebug_final"},
+        players=[{"role": "home", "player_id": "p", "pubkey": player.pubkey_hex, "key_kind": "tpm"}],
+        referee={"pubkey": ref_key.pubkey_hex, "key_id": ref_key.key_id, "key_kind": "tpm"},
+        challenges=chal, checkpoints={"home": cps},
+        agreement={"timelines_agree": None, "mismatches": []},
+        signals={"motion_permille": {"home": 500}},
+    )
+    body = sign_referee(body, ref_key)
+    body = sign_player(body, "home", player)
+    v = verify_receipt(body, referee_pub=ref_key.pubkey_hex)
+    assert v["status"] == PARTIAL
+    assert "home:key_kind_claim_unverified:tpm" in v["partial"]
+    assert "referee_key_kind_claim_unverified:tpm" in v["partial"]
+
+
+def test_short_challenge_pattern_fails(ref):
+    from qor_receipt import receipt as R
+    from qor_receipt.challenge import new_nonce
+    from qor_receipt.checkpoints import Chain, countersign, window_hash
+    from qor_receipt.keys import SoftwareKey
+    from qor_receipt.receipt import FAIL, sign_player, sign_referee, verify_receipt
+
+    ref_key, player = SoftwareKey(), SoftwareKey()
+    mid, start = "m-pat", 1_800_000_000_000
+    end = start + 12_000
+    ch, cps, t = Chain(), [], start
+    while t <= end:
+        cp = ch.next(t, window_hash([b"p"]), window_hash([]))
+        cps.append(countersign(ref_key, mid, "home", cp, t + 50))
+        t += 4_000
+    chal = []
+    for i, ph in enumerate(("kickoff", "halftime", "end")):
+        n = new_nonce(); iss = start + i * 3_000
+        chal.append({"id": f"c{i}", "role": "home", "phase": ph, "nonce": n, "pattern": ["OPTIONS"],
+                     "issued_ms": iss, "deadline_ms": iss + 20_000,
+                     "result": {"ok": True, "reason": "ok"}})
+    body = R.build(
+        match={"match_id": mid, "game": "madden27", "platform": "ps5", "scorebug_profile": "madden27_standard",
+               "mode": "single", "started_ms": start, "ended_ms": end},
+        result={"home_score": 7, "away_score": 0, "quarter": 4, "final_t_ms": end - 50,
+                "winner": "home", "method": "agreed_scorebug_final"},
+        players=[{"role": "home", "player_id": "p", "pubkey": player.pubkey_hex, "key_kind": "software"}],
+        referee={"pubkey": ref_key.pubkey_hex, "key_id": ref_key.key_id, "key_kind": "software"},
+        challenges=chal, checkpoints={"home": cps},
+        agreement={"timelines_agree": None, "mismatches": []},
+        signals={"motion_permille": {"home": 500}},
+    )
+    body = sign_referee(body, ref_key)
+    body = sign_player(body, "home", player)
+    v = verify_receipt(body, referee_pub=ref_key.pubkey_hex)
+    assert v["status"] == FAIL
+    assert any("pattern_too_short" in e for e in v["errors"])

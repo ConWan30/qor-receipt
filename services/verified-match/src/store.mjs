@@ -77,6 +77,7 @@ export function toPublic(record, receiptId) {
       livemode: false,
       payment_status: null,
       recorded_at: null,
+      receipt_sha256: null,
     };
   }
   const paid = record.paid === true;
@@ -88,5 +89,6 @@ export function toPublic(record, receiptId) {
     livemode: false,
     payment_status: record.payment_status ?? null,
     recorded_at: record.recorded_at ?? null,
+    receipt_sha256: typeof record.receipt_sha256 === "string" ? record.receipt_sha256 : null,
   };
 }

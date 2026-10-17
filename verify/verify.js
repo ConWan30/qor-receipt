@@ -5,6 +5,11 @@ export const SCHEMA = "qor-receipt/v0";
 const PHASES = ["kickoff", "halftime", "end"];
 const ALPHABET = ["CROSS", "CIRCLE", "SQUARE", "TRIANGLE", "UP", "DOWN", "LEFT", "RIGHT"];
 const MAX_GAP_MS = 10000, MAX_SKEW_MS = 3000, MOTION_MIN = 300;
+const DEFAULT_LEN = 4;
+const RESULT_METHODS = new Set(["agreed_scorebug_final", "end_menu_read", "last_scorebug_read_unconfirmed"]);
+const ROLES = new Set(["home", "away"]);
+const LOCAL_REFEREE_PREFIXES = ["local-self-attested"];
+const UNVERIFIED_KIND_CLAIMS = new Set(["tpm"]);
 const enc = new TextEncoder();
 
 function cmpUtf16(a, b) { // JS strings are UTF-16: plain code-unit compare = RFC 8785 order
@@ -77,6 +82,10 @@ function computeTier(r) {
   return dual ? "dual-attested" : "single-attested";
 }
 
+function isNonnegInt(v) {
+  return typeof v === "number" && Number.isSafeInteger(v) && v >= 0;
+}
+
 export async function verifyReceipt(r, refereePub = null) {
   const errors = [], partial = [];
   let tier = null;
@@ -88,20 +97,53 @@ export async function verifyReceipt(r, refereePub = null) {
     else if (refereePub.toLowerCase() !== ref.pubkey.toLowerCase()) errors.push("referee_key_mismatch");
     const rs = sigs.referee;
     if (!rs || rs.key_id !== (await kid(ref.pubkey)) || !(await edVerify(ref.pubkey, rs.sig, msg))) errors.push("bad_referee_signature");
-    for (const p of r.players) {
-      const ps = (sigs.players || {})[p.role];
-      if (!ps) errors.push(`missing_player_signature:${p.role}`);
-      else if (ps.key_id !== (await kid(p.pubkey)) || !(await edVerify(p.pubkey, ps.sig, msg))) errors.push(`bad_player_signature:${p.role}`);
+
+    let players = r.players;
+    if (!Array.isArray(players) || !players.length) {
+      errors.push("no_players");
+      players = [];
     }
-    const m = r.match;
-    for (const p of r.players) {
+    const rolesSeen = new Set();
+    for (const p of players) {
       const role = p.role;
+      if (!ROLES.has(role)) {
+        errors.push(`bad_player_role:${JSON.stringify(role)}`);
+        continue;
+      }
+      if (rolesSeen.has(role)) errors.push(`duplicate_player_role:${role}`);
+      rolesSeen.add(role);
+      const ps = (sigs.players || {})[role];
+      if (!ps) errors.push(`missing_player_signature:${role}`);
+      else if (ps.key_id !== (await kid(p.pubkey)) || !(await edVerify(p.pubkey, ps.sig, msg))) errors.push(`bad_player_signature:${role}`);
+      if (UNVERIFIED_KIND_CLAIMS.has(p.key_kind)) partial.push(`${role}:key_kind_claim_unverified:${p.key_kind}`);
+    }
+
+    const m = r.match;
+    if (m.mode === "dual" && !(rolesSeen.has("home") && rolesSeen.has("away") && rolesSeen.size === 2)) {
+      errors.push("dual_missing_roles");
+    }
+
+    const refKind = String(ref.key_kind || "");
+    if (LOCAL_REFEREE_PREFIXES.some((p) => refKind.startsWith(p))) partial.push("referee_local_self_attested");
+    if (UNVERIFIED_KIND_CLAIMS.has(refKind)) partial.push(`referee_key_kind_claim_unverified:${refKind}`);
+    for (const p of players) {
+      if (ROLES.has(p.role) && String(p.pubkey || "").toLowerCase() === String(ref.pubkey || "").toLowerCase()) {
+        partial.push("referee_same_as_player");
+        break;
+      }
+    }
+
+    for (const p of players) {
+      const role = p.role;
+      if (!ROLES.has(role)) continue;
       for (const e of await verifyChain(r.checkpoints[role], m.match_id, role, ref.pubkey, m.started_ms, m.ended_ms)) errors.push(`${role}:${e}`);
       for (const ph of PHASES) {
         const cs = r.challenges.filter((c) => c.role === role && c.phase === ph);
         if (!cs.length) partial.push(`${role}:challenge_missing:${ph}`);
         for (const c of cs) {
-          if (canonicalize(c.pattern) !== canonicalize(await patternFor(c.nonce, c.pattern.length - 1))) errors.push(`${role}:${ph}:pattern_not_from_nonce`);
+          const pat = c.pattern || [];
+          if (!Array.isArray(pat) || pat.length < DEFAULT_LEN + 1) errors.push(`${role}:${ph}:pattern_too_short`);
+          else if (canonicalize(c.pattern) !== canonicalize(await patternFor(c.nonce, c.pattern.length - 1))) errors.push(`${role}:${ph}:pattern_not_from_nonce`);
           if (c.result == null) partial.push(`${role}:challenge_unanswered:${ph}`);
           else if (!c.result.ok) errors.push(`${role}:${ph}:challenge_failed:${c.result.reason}`);
         }
@@ -112,7 +154,10 @@ export async function verifyReceipt(r, refereePub = null) {
     }
     if (m.mode === "dual" && (r.agreement || {}).timelines_agree !== true) errors.push("dual_timelines_disagree");
     const res = r.result;
-    if (res.winner !== (res.home_score > res.away_score ? "home" : "away")) errors.push("winner_inconsistent");
+    if (!isNonnegInt(res.home_score) || !isNonnegInt(res.away_score)) errors.push("score_not_nonneg_int");
+    else if (res.winner !== (res.home_score > res.away_score ? "home" : "away")) errors.push("winner_inconsistent");
+    if (typeof res.quarter !== "number" || !Number.isSafeInteger(res.quarter) || res.quarter < 4) errors.push("quarter_not_final");
+    if (!RESULT_METHODS.has(res.method)) errors.push("bad_result_method");
     tier = computeTier(r);
     if (r.trust_tier !== tier) errors.push("trust_tier_claim_wrong");
   } catch (e) {

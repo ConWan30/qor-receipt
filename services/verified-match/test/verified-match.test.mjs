@@ -184,20 +184,28 @@ test("checkout and receipt routes stay in test mode", async () => {
     const bad = await fetch(`${base}/v1/checkout`, {
       method: "POST",
       headers: { "content-type": "application/json", origin: "https://conwan30.github.io" },
-      body: JSON.stringify({ receipt_id: "bad id" }),
+      body: JSON.stringify({ receipt_id: "bad id", receipt_sha256: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }),
     });
     assert.equal(bad.status, 400);
+    const missingSha = await fetch(`${base}/v1/checkout`, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: "https://conwan30.github.io" },
+      body: JSON.stringify({ receipt_id: "match_42" }),
+    });
+    assert.equal(missingSha.status, 400);
+
 
     const created = await fetch(`${base}/v1/checkout`, {
       method: "POST",
       headers: { "content-type": "application/json", origin: "https://conwan30.github.io" },
-      body: JSON.stringify({ receipt_id: "match_42" }),
+      body: JSON.stringify({ receipt_id: "match_42", receipt_sha256: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }),
     });
     assert.equal(created.status, 200);
     assert.equal(created.headers.get("access-control-allow-origin"), "https://conwan30.github.io");
     const createdBody = await created.json();
     assert.equal(createdBody.url, "https://checkout.stripe.com/c/pay/cs_test_mock");
     assert.equal(stripe.created[0].metadata.receipt_id, "match_42");
+    assert.equal(stripe.created[0].metadata.receipt_sha256, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
     assert.equal(stripe.created[0].client_reference_id, "match_42");
 
     const unpaid = await fetch(`${base}/v1/webhook`, {
@@ -263,7 +271,7 @@ test("live keys and live events never mark a receipt paid", async () => {
     const checkout = await fetch(`${base}/v1/checkout`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ receipt_id: "match_42" }),
+      body: JSON.stringify({ receipt_id: "match_42", receipt_sha256: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }),
     });
     assert.equal(checkout.status, 403);
     assert.equal(stripe.created.length, 0);

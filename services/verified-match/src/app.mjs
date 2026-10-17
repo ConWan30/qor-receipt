@@ -7,7 +7,7 @@ import {
   lineItemsIncludePrice,
   siteOrigin,
 } from "./fulfill.mjs";
-import { isValidReceiptId } from "./receipt-id.mjs";
+import { isValidReceiptId, isValidReceiptSha256 } from "./receipt-id.mjs";
 import { toPublic } from "./store.mjs";
 
 const CHECKOUT_LIMIT = 8 * 1024;
@@ -214,7 +214,12 @@ export async function handle(req, res, ctx) {
       json(res, 400, { error: "receipt_id must be 1–128 letters, numbers, or . _ : -" }, cors);
       return;
     }
-    const params = buildCheckoutParams(receiptId, { priceId, site: siteOrigin(env) });
+    const receiptSha256 = body?.receipt_sha256;
+    if (!isValidReceiptSha256(receiptSha256)) {
+      json(res, 400, { error: "receipt_sha256 must be the 64-hex JCS SHA-256 of the receipt without signatures" }, cors);
+      return;
+    }
+    const params = buildCheckoutParams(receiptId, { priceId, site: siteOrigin(env), receiptSha256: receiptSha256.toLowerCase() });
     let session;
     try {
       const minute = Math.floor(now / 60_000);
@@ -277,6 +282,7 @@ export async function handle(req, res, ctx) {
     }
     const decision = decideFulfillment(event, session, { priceOk });
     if (decision.action === "record") {
+      const sha = typeof session?.metadata?.receipt_sha256 === "string" ? session.metadata.receipt_sha256.toLowerCase() : null;
       await ctx.store.save({
         receipt_id: decision.receiptId,
         paid: true,
@@ -287,6 +293,7 @@ export async function handle(req, res, ctx) {
         price_id: priceId,
         session_id: session.id,
         recorded_at: new Date(ctx.now ? ctx.now() : Date.now()).toISOString(),
+        receipt_sha256: isValidReceiptSha256(sha) ? sha : null,
       });
     } else if (decision.action === "fail") {
       await ctx.store.save({
