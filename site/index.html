@@ -45,7 +45,7 @@
  <p class="num">how it works</p>
  <h2 class="split big">Capture. Prove. Share.</h2>
  <div class="cards">
-  <div class="card glass"><h3>1 · Capture</h3><p><b>QorCap</b> is the one app you run, on Windows, during the match. It records the capture card and fingerprints the video as it is written: every segment is hashed and chained, with timestamped checkpoints. It stays light, so it doesn't strain your laptop.</p><span class="tag">controller button log in the same session · coming in v0.3</span></div>
+  <div class="card glass"><h3>1 · Capture</h3><p><b>QorCap</b> is the one app you run, on Windows, during the match. It records the capture card and fingerprints the video as it is written: every segment is hashed and chained, with timestamped checkpoints. It stays light, so it doesn't strain your laptop.</p><span class="tag">controller button log in the same session · since v0.3.0</span></div>
   <div class="card glass"><h3>2 · Prove</h3><p>After the final whistle, QorTime works on the finished recording. It re-checks the fingerprints, reads the score, and seals a signed receipt. The <b>AI referee</b> reviews the evidence and signs a verdict: <b>accept</b>, <b>dispute</b>, or <b>abstain</b>, with plain reasons and the evidence frames.</p></div>
   <div class="card glass"><h3>3 · Share</h3><p>Send the receipt to your opponent, a tournament, or a platform. Anyone can check it in the free <a href="verify/">browser verifier</a>, and nothing is uploaded. A hosted referee countersign, Verified Match, is in test-mode early access.</p></div>
  </div>
@@ -54,7 +54,7 @@
   <ul>
    <li><b>Integrity checks in code:</b> video fingerprints, checkpoint chain, and signatures. Scores can only move in legal football steps, never backwards. The clock only runs down within a quarter. The final screen must match the last score.</li>
    <li><b>AI referee:</b> reads frames to confirm the score. It only accepts a reading when it is confident and the reading agrees across several frames, and it <b>abstains</b> rather than guessing. Tampering is caught by the integrity checks, not by trusting a model.</li>
-   <li><b>Honest limit:</b> QorTime proves the footage's integrity and timing (and, coming in v0.3, the controller inputs from the same session). It does <b>not</b> prove who held the controller.</li>
+   <li><b>Honest limit:</b> QorTime proves the footage's integrity and timing (and, since QorCap v0.3.0, the controller inputs from the same session). It does <b>not</b> prove who held the controller.</li>
   </ul>
   <a class="btn ghost mag" href="how-it-works/"><span>How it works</span></a>
  </div>
@@ -92,7 +92,7 @@
   <div class="scene-copy">
    <p class="num">02 / challenge</p>
    <h2 class="split">Prove a human is on the sticks.</h2>
-   <p>At random moments the referee sends a nonce. The player pauses and enters the pattern, which must show up in the controller input log <em>and</em> on video within 600&nbsp;ms. Bots and replays don't get a second try.</p><p class="note">Today this runs with the QorTime agent rig. Controller-input logging inside QorCap is <b>coming in v0.3</b>.</p>
+   <p>At random moments the referee sends a nonce. The player pauses and enters the pattern, which must show up in the controller input log <em>and</em> on video within 600&nbsp;ms. Bots and replays don't get a second try.</p><p class="note">QorCap logs the controller since v0.3.0. Since v0.3.11 a challenge only opens when Madden lets you pause: after the kickoff and a play call, never during a kickoff.</p>
   </div>
   <div class="scene-art">
    <div class="pad-wrap glass">
@@ -189,7 +189,7 @@ receipt_hash</pre>
 
 <section class="wrap" id="limits">
  <div class="glass limits"><h2>Honest limits</h2>
- <p>QorTime proves the footage's integrity and timing. Controller inputs from the same session are <span class="tag">coming in v0.3</span> in QorCap. It does <b>not</b> prove:</p>
+ <p>QorTime proves the footage's integrity and timing. Controller inputs from the same session are logged by QorCap <span class="tag">since v0.3.0</span>. It does <b>not</b> prove:</p>
  <ul><li><b>Account sharing:</b> who is physically holding the controller.</li><li><b>Collusion:</b> both players agreeing to throw or fake a match.</li><li>Anything outside what the capture card saw.</li></ul>
  <a class="btn ghost mag" href="https://github.com/ConWan30/qortime/blob/main/docs/RISKS.md"><span>Read RISKS.md</span></a></div>
 </section>

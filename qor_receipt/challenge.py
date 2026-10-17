@@ -1,6 +1,7 @@
 """Nonce challenges -> DualSense button patterns, and the HID/vision verifier.
 
-The referee issues a random nonce at kickoff, halftime and end. The nonce maps
+The referee issues a random nonce for three phases: ``kickoff`` (game start), ``halftime`` (second half) and
+``end`` (4th quarter). The nonce maps
 deterministically to: OPTIONS (pause), then N face/d-pad buttons. The player
 performs it on the DualSense Edge (Bluetooth to the PS5). The same controller
 is also on USB to the PC, so the agent's HID log records the presses, and the
@@ -12,6 +13,16 @@ capture card shows the pause menu opening. The verifier requires:
    (before the press => video not live / not this console; too late => relayed).
 
 A pre-recorded or replayed stream cannot contain a nonce issued just now.
+
+v0.3.11 (pause-capable windows). In online Madden 27 a player cannot pause during a kickoff or a kickoff return:
+OPTIONS only opens the pause menu once a play has been called (pre-snap). So the recorder asks for a phase's nonce
+only at a pause-capable moment (after the kickoff of that half/quarter and a play call, see QorCap's
+``qorcap_playcall``), and the window is ``DEFAULT_DEADLINE_MS`` = 90 s so a quick snap by the opponent does not
+burn it: the player pauses at the next pre-snap. Phase names are unchanged for receipt compatibility.
+Inside the window the response is the first OPTIONS press that is followed by exactly the pattern, so an
+OPTIONS press that did nothing (live play) does not void the challenge. Security is unchanged: the pattern is
+unknown before ``issued_ms``, every press must fall inside [issued_ms, deadline_ms], the pause menu must appear
+0..600 ms after THAT press on video, and windows longer than ``MAX_WINDOW_MS`` are refused by the verifiers.
 """
 from __future__ import annotations
 
@@ -24,7 +35,9 @@ PAUSE = "OPTIONS"
 ALPHABET = ["CROSS", "CIRCLE", "SQUARE", "TRIANGLE", "UP", "DOWN", "LEFT", "RIGHT"]
 PHASES = ("kickoff", "halftime", "end")
 DEFAULT_LEN = 4
-DEFAULT_DEADLINE_MS = 20_000
+DEFAULT_DEADLINE_MS = 90_000   # v0.3.11: was 20 s (passable only if the prompt landed pre-snap)
+LEGACY_DEADLINE_MS = 20_000
+MAX_WINDOW_MS = 120_000          # verifiers refuse longer windows (partial: challenge_window_too_long)
 MIN_LATENCY_MS = 0
 MAX_LATENCY_MS = 600
 
@@ -60,13 +73,36 @@ class ChallengeResult:
                 "done_ms": self.done_ms, "latency_ms": self.latency_ms}
 
 
+def response_start(pattern: list[str], presses: list[dict[str, Any]]) -> int | None:
+    """Index (into time-sorted down presses) of the OPTIONS press that answers the challenge: the first one followed
+    by exactly the pattern; else the first OPTIONS press (so the failure reason stays pattern_mismatch); else None."""
+    first = None
+    for i, e in enumerate(presses):
+        if e["button"] != PAUSE:
+            continue
+        if first is None:
+            first = i
+        if [x["button"] for x in presses[i : i + len(pattern)]] == pattern:
+            return i
+    return first
+
+
+def response_press_ms(pattern: list[str], hid_events: list[dict[str, Any]], *, issued_ms: int,
+                      deadline_ms: int) -> int | None:
+    """t_ms of the answering OPTIONS press inside the window (what the video pause frame is matched against)."""
+    presses = sorted((e for e in hid_events if e.get("down", True) and issued_ms <= e["t_ms"] <= deadline_ms),
+                     key=lambda e: e["t_ms"])
+    i = response_start(pattern, presses)
+    return presses[i]["t_ms"] if i is not None else None
+
+
 def verify_response(pattern: list[str], hid_events: list[dict[str, Any]], *, issued_ms: int,
                     deadline_ms: int, pause_seen_ms: int | None,
                     min_latency_ms: int = MIN_LATENCY_MS, max_latency_ms: int = MAX_LATENCY_MS) -> ChallengeResult:
     """hid_events: [{"t_ms": int, "button": str, "down": bool}] in capture order."""
     presses = sorted((e for e in hid_events if e.get("down") and issued_ms <= e["t_ms"] <= deadline_ms),
                      key=lambda e: e["t_ms"])
-    start = next((i for i, e in enumerate(presses) if e["button"] == PAUSE), None)
+    start = response_start(pattern, presses)
     if start is None:
         return ChallengeResult(False, "no_pause_press")
     seq = [e["button"] for e in presses[start : start + len(pattern)]]

@@ -3,6 +3,15 @@
   "errors": [
    "referee_key_mismatch"
   ],
+  "partial": [
+   "referee_not_on_allowlist",
+   "referee_local_self_attested",
+   "referee_pin_not_allowlisted",
+   "home:challenge_missing:kickoff",
+   "home:challenge_missing:halftime",
+   "home:challenge_missing:end",
+   "home:motion_signal_missing"
+  ],
   "status": "FAIL"
  },
  "name": "foreign_key_pinned_mismatch",

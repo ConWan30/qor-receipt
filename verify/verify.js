@@ -9,6 +9,7 @@ const PHASES = ["kickoff", "halftime", "end"];
 const ALPHABET = ["CROSS", "CIRCLE", "SQUARE", "TRIANGLE", "UP", "DOWN", "LEFT", "RIGHT"];
 const MAX_GAP_MS = 10000, MAX_SKEW_MS = 3000, MOTION_MIN = 300;
 const DEFAULT_LEN = 4;
+const MAX_WINDOW_MS = 120000; // v0.3.11: challenge windows are 90 s; longer is not a timed challenge
 const RESULT_METHODS = new Set(["agreed_scorebug_final", "end_menu_read", "last_scorebug_read_unconfirmed"]);
 const UNCONFIRMED = "last_scorebug_read_unconfirmed";
 
@@ -210,6 +211,7 @@ export function challengeEvidenceErrors(c, cps) {
   if (typeof hid !== "string" || hid.length !== 64 || !/^[0-9a-fA-F]{64}$/.test(hid)) errs.push("challenge_missing_hid_sha256");
   const issued = c.issued_ms, deadline = c.deadline_ms;
   const pause = res.pause_press_ms, done = res.done_ms, lat = res.latency_ms;
+  if (!(deadline - issued > 0 && deadline - issued <= MAX_WINDOW_MS)) errs.push("challenge_window_too_long");
   if (pause == null || done == null || lat == null) errs.push("challenge_timing_incomplete");
   else {
     if (!(issued <= pause && pause <= deadline)) errs.push("challenge_pause_outside_window");

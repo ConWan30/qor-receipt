@@ -81,6 +81,7 @@ def test_golden_fixture_verdicts(path):
     v = R.verify_receipt(doc["receipt"], referee_pub=doc["referee_pub"])
     assert v["status"] == doc["expect"]["status"]
     assert v["errors"] == doc["expect"]["errors"]
+    assert v["partial"] == doc["expect"]["partial"]
     js = pytest.importorskip("jsonschema")
     js.validate(doc["receipt"], json.loads((ROOT / "schema" / "receipt.v0.json").read_text(encoding="utf-8")))
 
@@ -95,9 +96,29 @@ def test_golden_fixtures_cover_required_cases_and_are_reproducible():
         assert json.loads((ROOT / "tests" / "fixtures" / "contract" / f"{name}.json").read_text())["receipt"] == rec, name
     want = {"good": "SELF_ATTESTED", "tampered_score": "FAIL", "foreign_key_pinned_mismatch": "FAIL",
             "foreign_key_claims_official": "FAIL", "missing_checkpoint": "FAIL", "v032_late_stop_tail": "FAIL",
-            "v033_sealed_stop_tail": "SELF_ATTESTED", "slow_genesis": "FAIL", "finalize_offline": "SELF_ATTESTED"}
+            "v033_sealed_stop_tail": "SELF_ATTESTED", "slow_genesis": "FAIL", "finalize_offline": "SELF_ATTESTED",
+            "v0311_challenges_answered": "SELF_ATTESTED", "v0310_challenge_result_null": "SELF_ATTESTED",
+            "v0310_legacy_20s_window": "SELF_ATTESTED", "v0311_challenge_window_too_long": "SELF_ATTESTED"}
     for n, s in want.items():
         assert json.loads((ROOT / "tests" / "fixtures" / "contract" / f"{n}.json").read_text())["expect"]["status"] == s, n
+
+
+def test_v0311_challenge_fixtures_partials():
+    """Answered pause-capable challenges add no challenge partial; the v0.3.10 null result is exactly what QorTime
+    listed for match 4; an over-long window is flagged."""
+    fx = lambda n: json.loads((ROOT / "tests/fixtures/contract" / f"{n}.json").read_text())["expect"]["partial"]  # noqa: E731
+    assert not [x for x in fx("v0311_challenges_answered") if "challenge" in x]
+    assert not [x for x in fx("v0310_legacy_20s_window") if "challenge" in x]
+    assert [x for x in fx("v0310_challenge_result_null") if "challenge" in x] == ["home:challenge_unanswered:kickoff"]
+    assert {x for x in fx("v0311_challenge_window_too_long") if "challenge" in x} == {
+        f"home:{ph}:challenge_window_too_long" for ph in ("kickoff", "halftime", "end")}
+    rules = COMPAT["challenge_rules"]
+    from qor_receipt import challenge as CH
+    assert rules["window_ms"] == CH.DEFAULT_DEADLINE_MS and rules["max_window_ms"] == CH.MAX_WINDOW_MS
+    assert rules["legacy_window_ms"] == CH.LEGACY_DEADLINE_MS and rules["phases"] == list(CH.PHASES)
+    assert rules["pause_latency_ms"] == [CH.MIN_LATENCY_MS, CH.MAX_LATENCY_MS]
+    js = (ROOT / "verify" / "verify.js").read_text(encoding="utf-8")
+    assert f"MAX_WINDOW_MS = {CH.MAX_WINDOW_MS};" in js
 
 
 def test_stop_tail_rule_is_the_verifier_rule():

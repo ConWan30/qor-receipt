@@ -41,12 +41,27 @@ ALPHABET = `CROSS CIRCLE SQUARE TRIANGLE UP DOWN LEFT RIGHT`. If `b` equals the 
 ALPHABET. The pattern is `["OPTIONS", b0..b3]`.
 
 The referee accepts the response when, in the agent's HID log (DualSense Edge over USB):
-1. the first `OPTIONS` press in `[issued_ms, deadline_ms]` is followed **immediately** by the four buttons, in order
-   (key-downs only, other presses not allowed in between); and
+1. an `OPTIONS` press in `[issued_ms, deadline_ms]` is followed **immediately** by the four buttons, in order
+   (key-downs only, other presses not allowed in between). The answering press is the first OPTIONS press that is
+   followed by the pattern (v0.3.11: an OPTIONS press during a live play does nothing in online Madden and does not
+   void the challenge); and
 2. the pause menu was detected on the capture feed at `pause_seen_ms`, with 0 ≤ `pause_seen_ms − pause_press_ms` ≤ 600 ms.
    A negative latency means the video isn't from this console or isn't live. Too large a latency suggests a relay.
 
-The deadline is issue + 20 s, and submissions are refused more than 5 s after the deadline.
+The deadline is issue + 90 s (v0.3.11; it was 20 s), and submissions are refused more than 5 s after the deadline.
+Verifiers flag `challenge_window_too_long` (partial) when `deadline_ms − issued_ms` is not in (0, 120 s].
+
+**When a challenge opens (v0.3.11).** Online Madden 27 does not let a player pause during a kickoff or a kickoff
+return; OPTIONS opens the pause menu only after a play has been called (pre-snap). So the recorder asks the referee
+for a phase's nonce only at a pause-capable moment: `kickoff` = after the opening kickoff (game clock seen running in
+Q1+) and the first play-call screen that follows; `halftime` = the same after the second-half kickoff (Q3+); `end` =
+the same in Q4+. If no play-call screen is detected, the window opens 45 s after the clock started running in that
+quarter (`clock_proxy`). Each opening is logged in `challenge_gates.jsonl`. The pattern is only shown after issue, so
+the security argument (no pre-knowledge, HID + video pause 0–600 ms after the press) is unchanged.
+
+**Recorder result (QorCap ≥ 0.3.11).** At finalize QorCap re-runs each challenge on its own bundle
+(`qor_receipt.review.local`) and writes an ok `result` (`reverified_by: "recorder"`) into the receipt; a miss stays
+`null` with the reason in `challenge_results.jsonl`. The official referee re-runs everything itself.
 
 ## 4. Checkpoint chain
 

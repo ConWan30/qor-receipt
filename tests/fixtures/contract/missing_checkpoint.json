@@ -7,6 +7,15 @@
    "home:cp[5]:seq_gap",
    "home:cp[6]:seq_gap"
   ],
+  "partial": [
+   "referee_not_on_allowlist",
+   "referee_local_self_attested",
+   "referee_pin_not_allowlisted",
+   "home:challenge_missing:kickoff",
+   "home:challenge_missing:halftime",
+   "home:challenge_missing:end",
+   "home:motion_signal_missing"
+  ],
   "status": "FAIL"
  },
  "name": "missing_checkpoint",

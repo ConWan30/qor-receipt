@@ -14,7 +14,7 @@ from typing import Any
 
 from qor_receipt import SCHEMA
 from qor_receipt import delegation as D
-from qor_receipt.challenge import DEFAULT_LEN, PHASES, pattern_for
+from qor_receipt.challenge import DEFAULT_LEN, MAX_WINDOW_MS, PHASES, pattern_for
 from qor_receipt.checkpoints import verify_chain
 from qor_receipt.jcs import canonicalize
 from qor_receipt.keys import KeyProvider, kid, verify  # noqa: F401
@@ -118,6 +118,9 @@ def _challenge_evidence_errors(c: dict[str, Any], cps: list[dict[str, Any]]) -> 
         lat = res.get("latency_ms")
     except (KeyError, TypeError, ValueError):
         return errs + ["challenge_timing_malformed"]
+    # v0.3.11: windows are 90 s (pause-capable moments); anything over MAX_WINDOW_MS is not a timed challenge.
+    if not (0 < deadline - issued <= MAX_WINDOW_MS):
+        errs.append("challenge_window_too_long")
     if pause is None or done is None or lat is None:
         errs.append("challenge_timing_incomplete")
     else:

@@ -7,8 +7,9 @@ let fails = 0, n = 0;
 for (const f of readdirSync(dir).filter((x) => x.endsWith(".json")).sort()) {
   const d = JSON.parse(readFileSync(new URL(f, dir)));
   const r = await verifyReceipt(d.receipt, d.referee_pub);
-  const same = r.status === d.expect.status && JSON.stringify([...r.errors].sort()) === JSON.stringify([...d.expect.errors].sort());
-  console.log((same ? "ok   " : "FAIL ") + `${d.name}: js=${r.status} py=${d.expect.status}` + (same ? "" : ` js_errors=${JSON.stringify(r.errors)}`));
+  const same = r.status === d.expect.status && JSON.stringify([...r.errors].sort()) === JSON.stringify([...d.expect.errors].sort())
+    && (!d.expect.partial || JSON.stringify([...r.partial].sort()) === JSON.stringify([...d.expect.partial].sort()));
+  console.log((same ? "ok   " : "FAIL ") + `${d.name}: js=${r.status} py=${d.expect.status}` + (same ? "" : ` js_errors=${JSON.stringify(r.errors)} js_partial=${JSON.stringify(r.partial)}`));
   n++; if (!same) fails++;
 }
 if (n < 9) { console.log(`FAIL only ${n} fixtures`); fails++; }

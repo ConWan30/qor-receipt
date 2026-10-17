@@ -61,3 +61,74 @@ def test_motion_correlation():
     assert motion_correlation_permille(x, [0, 0] + x[:-2]) > 900
     assert motion_correlation_permille(x, [50] * 40) == -1000
     assert motion_correlation_permille(x, [((i * 5) % 3) * 9 for i in range(40)]) < 500
+
+
+# ---------------------------------------------------------------- v0.3.11: pause-capable windows
+def test_v0311_window_is_90s_and_capped():
+    from qor_receipt import challenge as CH
+    assert CH.DEFAULT_DEADLINE_MS == 90_000 and CH.LEGACY_DEADLINE_MS == 20_000 and CH.MAX_WINDOW_MS == 120_000
+
+
+def test_dead_options_press_before_the_real_one_does_not_void_the_challenge():
+    """Online Madden: OPTIONS during a live play / kickoff return does nothing. The answering press is the first
+    OPTIONS followed by exactly the pattern, and the pause frame is judged against THAT press."""
+    p = pattern_for(NONCE)
+    ev = perform([PAUSE, "CROSS"], 2_000) + perform(p, 30_000)
+    r = verify_response(p, ev, issued_ms=0, deadline_ms=90_000, pause_seen_ms=30_150)
+    assert r.ok and r.pause_press_ms == 30_000 and r.latency_ms == 150
+    # the pause seen after the dead press is not accepted for the real one
+    r2 = verify_response(p, ev, issued_ms=0, deadline_ms=90_000, pause_seen_ms=2_150)
+    assert not r2.ok and r2.reason == "video_before_input"
+
+
+def test_response_press_ms_and_pattern_still_must_be_exact():
+    from qor_receipt.challenge import response_press_ms
+    p = pattern_for(NONCE)
+    ev = perform([PAUSE], 1_000) + perform(p, 5_000)
+    assert response_press_ms(p, ev, issued_ms=0, deadline_ms=90_000) == 5_000
+    assert response_press_ms(p, perform([PAUSE, "CROSS"], 1_000), issued_ms=0, deadline_ms=90_000) == 1_000
+    assert response_press_ms(p, perform(p, 95_000), issued_ms=0, deadline_ms=90_000) is None
+    # an extra press inside the pattern is still a mismatch, presses before issue still do not count
+    bad = perform(p[:2] + ["TRIANGLE" if p[2] != "TRIANGLE" else "CROSS"] + p[2:], 1_000)
+    assert verify_response(p, bad, issued_ms=0, deadline_ms=90_000, pause_seen_ms=1_100).reason == "pattern_mismatch"
+    assert verify_response(p, perform(p, -1_000), issued_ms=0, deadline_ms=90_000,
+                           pause_seen_ms=-900).reason == "no_pause_press"
+
+
+def test_recorder_rerun_fills_ok_result_only():
+    """QorCap finalize (qor_receipt.review.local): ok -> result in the receipt; failure -> null + local reason."""
+    from qor_receipt.review.local import rerun
+    p = pattern_for(NONCE)
+    c = {"id": NONCE[:8], "phase": "kickoff", "pattern": p, "issued_ms": 10_000, "deadline_ms": 100_000}
+    presses = [dict(e, mono_ms=e["t_ms"]) for e in perform(p, 40_000)]
+    out = rerun(c, presses, lambda lo, hi: [40_200])
+    assert out["result"]["ok"] and out["result"]["latency_ms"] == 200 and out["result"]["reverified_by"] == "recorder"
+    assert len(out["result"]["hid_sha256"]) == 64
+    miss = rerun(c, presses, lambda lo, hi: [])
+    assert miss["result"] is None and miss["local"]["reason"] == "pause_not_seen_on_video"
+
+    def boom(lo, hi):
+        raise RuntimeError("ffmpeg not available")
+    err = rerun(c, presses, boom)
+    assert err["result"] is None and "ffmpeg" in err["local"]["note"]
+    none = rerun(c, [], lambda lo, hi: [])
+    assert none["result"] is None and none["local"]["reason"] == "no_pause_press"
+
+
+def test_recorder_challenge_results_on_bundle_dir(tmp_path):
+    """Presses come from the committed inputs.jsonl (wall = header anchor + mono), like the referee."""
+    import json as _j
+
+    from qor_receipt.review.local import challenge_results
+    p = pattern_for(NONCE)
+    bits = {"CROSS": 0, "CIRCLE": 1, "SQUARE": 2, "TRIANGLE": 3, "OPTIONS": 9, "UP": 12, "DOWN": 13, "LEFT": 14, "RIGHT": 15}
+    rows = [{"type": "header", "schema": "qorcap-inputs/v0", "wall_anchor_ms": 1_000_000}]
+    t = 50_000
+    for b in p:
+        rows += [{"type": "in", "t_us": t * 1000, "b": 1 << bits[b]}, {"type": "in", "t_us": (t + 100) * 1000, "b": 0}]
+        t += 600
+    (tmp_path / "inputs.jsonl").write_text("\n".join(_j.dumps(r) for r in rows) + "\n")
+    c = {"id": "x", "phase": "halftime", "pattern": p, "issued_ms": 1_040_000, "deadline_ms": 1_130_000}
+    out = challenge_results(tmp_path, [c], decode=False)
+    assert out[0]["result"] is None and out[0]["local"]["pause_press_ms"] == 1_050_000
+    assert out[0]["local"]["presses_in_window"] == 5 and "ffmpeg" in out[0]["local"]["note"]

@@ -1,6 +1,15 @@
 {
  "expect": {
   "errors": [],
+  "partial": [
+   "referee_not_on_allowlist",
+   "referee_local_self_attested",
+   "referee_pin_not_allowlisted",
+   "home:challenge_missing:kickoff",
+   "home:challenge_missing:halftime",
+   "home:challenge_missing:end",
+   "home:motion_signal_missing"
+  ],
   "status": "SELF_ATTESTED"
  },
  "name": "good_monday_night_end_menu",
