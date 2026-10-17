@@ -1,0 +1,151 @@
+{
+ "expect": {
+  "errors": [
+   "home:cp[0]:gap_too_long"
+  ],
+  "status": "FAIL"
+ },
+ "name": "slow_genesis",
+ "receipt": {
+  "agreement": {
+   "mismatches": [],
+   "timelines_agree": null
+  },
+  "challenges": [],
+  "checkpoints": {
+   "home": [
+    {
+     "frames_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+     "hash": "5842e48548f4c66709fe40db0351e0c17643611cf3697b7cc45892a4dbfe5d09",
+     "input_hash": "0000000000000000000000000000000000000000000000000000000000000064",
+     "prev": "0000000000000000000000000000000000000000000000000000000000000000",
+     "referee_sig": "7056b43d115d373c93b8c5b0e56cc2d55f14a81bcb36fdfe175f3988f189df6944669f956feb4e431c26f5b84342a1973e4b8259167439db5cf7cdfc17c6ce0b",
+     "referee_ts_ms": 1792000010620,
+     "seq": 0,
+     "t_ms": 1792000010500
+    },
+    {
+     "frames_hash": "0000000000000000000000000000000000000000000000000000000000000001",
+     "hash": "a82a72643539de8daa3b0096087cc6586edf40781e142736dcdc039b06bb3179",
+     "input_hash": "0000000000000000000000000000000000000000000000000000000000000065",
+     "prev": "5842e48548f4c66709fe40db0351e0c17643611cf3697b7cc45892a4dbfe5d09",
+     "referee_sig": "ff4e585291df3969100d5194060ef14b9685b581da016f9bd2576a28adb5e04942b8ac091f77818fdeb7ffff6b6f13123ae192e61006e56eb9581637044d9e08",
+     "referee_ts_ms": 1792000012620,
+     "seq": 1,
+     "t_ms": 1792000012500
+    },
+    {
+     "frames_hash": "0000000000000000000000000000000000000000000000000000000000000002",
+     "hash": "dbb93db58d7a822f39ae4b4de48d435d3ce301ff4474e4f8e28cb0611ca51df5",
+     "input_hash": "0000000000000000000000000000000000000000000000000000000000000066",
+     "prev": "a82a72643539de8daa3b0096087cc6586edf40781e142736dcdc039b06bb3179",
+     "referee_sig": "4a1da342b689fd03b7821dd7b6687d3a322c9a844359e2e3347140586763a228032a303333895bca997f6fb056deeb54955507df0feb19c96c154c72ab01d505",
+     "referee_ts_ms": 1792000014620,
+     "seq": 2,
+     "t_ms": 1792000014500
+    },
+    {
+     "frames_hash": "0000000000000000000000000000000000000000000000000000000000000003",
+     "hash": "b59fc78d09eb6a8f8f8c411e12efe80ff1d1a3044701bc63393fb3fdf5936dd1",
+     "input_hash": "0000000000000000000000000000000000000000000000000000000000000067",
+     "prev": "dbb93db58d7a822f39ae4b4de48d435d3ce301ff4474e4f8e28cb0611ca51df5",
+     "referee_sig": "c0adff12ff95ccdbbf65e2204581ab1eda4c690d8bdbc50724a753abd9dafc15450bb4ad3f467b3a29a06c7ed6de6b6b3f3267b5630c0ddd1ac43dfcdca15307",
+     "referee_ts_ms": 1792000016620,
+     "seq": 3,
+     "t_ms": 1792000016500
+    },
+    {
+     "frames_hash": "0000000000000000000000000000000000000000000000000000000000000004",
+     "hash": "4d2288a56f9980ae73bbe8902c495741c7ba53113985a6a01eabb62ae0aff867",
+     "input_hash": "0000000000000000000000000000000000000000000000000000000000000068",
+     "prev": "b59fc78d09eb6a8f8f8c411e12efe80ff1d1a3044701bc63393fb3fdf5936dd1",
+     "referee_sig": "f7da545d9fc2012d61d7ed0c2d70a0739b1725abaadc3f54cf5289ea63ba143a0dd9013b9febcf5b09c6ac91e99869823093cc9da69af162c8e1efdc0161ba0a",
+     "referee_ts_ms": 1792000018620,
+     "seq": 4,
+     "t_ms": 1792000018500
+    },
+    {
+     "frames_hash": "0000000000000000000000000000000000000000000000000000000000000005",
+     "hash": "fce436ccd7bbf36a2f18679ef6606be063753a5902282a9d61d96dc4b90035c7",
+     "input_hash": "0000000000000000000000000000000000000000000000000000000000000069",
+     "prev": "4d2288a56f9980ae73bbe8902c495741c7ba53113985a6a01eabb62ae0aff867",
+     "referee_sig": "767dad93d63db5078585943cbe05fa4c0fa072a541193eb61b029ac75503f712c72308b577d7469ddd2dbf056104fc43f42e84708abb34aed7fc0b690c57e102",
+     "referee_ts_ms": 1792000020620,
+     "seq": 5,
+     "t_ms": 1792000020500
+    },
+    {
+     "frames_hash": "0000000000000000000000000000000000000000000000000000000000000006",
+     "hash": "6aa6e506395d6d25ed35c649668700eefe361c046d5b982f23a9335e43b6ec86",
+     "input_hash": "000000000000000000000000000000000000000000000000000000000000006a",
+     "prev": "fce436ccd7bbf36a2f18679ef6606be063753a5902282a9d61d96dc4b90035c7",
+     "referee_sig": "ae184b58942c811e9d45c3ac3cd80cfae35562bed10470373bcbfe19494d5ec289eb8aff8d152e7dbf75a16097d0871a57e2786c37ef189c92f2d0f3fd01da0e",
+     "referee_ts_ms": 1792000022650,
+     "seq": 6,
+     "t_ms": 1792000022500
+    },
+    {
+     "frames_hash": "0000000000000000000000000000000000000000000000000000000000000007",
+     "hash": "10c32d40550c39befb31c20f7dc8c2d8507a30442deaeb234560b46549ba2520",
+     "input_hash": "000000000000000000000000000000000000000000000000000000000000006b",
+     "prev": "6aa6e506395d6d25ed35c649668700eefe361c046d5b982f23a9335e43b6ec86",
+     "referee_sig": "5d7e65b3b583d8dc845bdb121a07d04589617c9ba49073df5bd3c7c5f7e9ff40a88d119cca9a7fc98864c5b8de3c656453d0b150acf4fd35c2d3ca8ca73e2c0c",
+     "referee_ts_ms": 1792000024650,
+     "seq": 7,
+     "t_ms": 1792000024500
+    }
+   ]
+  },
+  "match": {
+   "ended_ms": 1792000024650,
+   "game": "madden27",
+   "match_id": "local-contract-1",
+   "mode": "single",
+   "platform": "ps5",
+   "scorebug_profile": "madden27_standard",
+   "started_ms": 1792000000000
+  },
+  "players": [
+   {
+    "key_kind": "software-file",
+    "player_id": "local:player",
+    "pubkey": "d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737",
+    "role": "home"
+   }
+  ],
+  "referee": {
+   "key_id": "1325b850c2871916",
+   "key_kind": "local-self-attested",
+   "pubkey": "a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0"
+  },
+  "result": {
+   "away_score": 17,
+   "final_basis": "clock_zero",
+   "final_t_ms": 1792000024000,
+   "home_score": 21,
+   "method": "agreed_scorebug_final",
+   "quarter": 4,
+   "winner": "home"
+  },
+  "schema": "qor-receipt/v0",
+  "signals": {
+   "motion_permille": {
+    "home": null
+   }
+  },
+  "signatures": {
+   "players": {
+    "home": {
+     "key_id": "10ba682c8ad13513",
+     "sig": "d4d0272e68a4920a1c87ebcee546dc431adee9b2d9f1b4b86a95522cf64a46dba02e9d21010165aa120ea01fd2f84d54a75a2dae8775b69f68b8ecf7d2d4c10f"
+    }
+   },
+   "referee": {
+    "key_id": "1325b850c2871916",
+    "sig": "705d5a0422c78958d1b77958cb9e35f4813ea862b51911d50cf18dc261cd65b804001f5fe13e738dfc49a705c9b9c615b41d8f0ac702c5dfc6825b8faf1f050d"
+   }
+  },
+  "trust_tier": "single-attested"
+ },
+ "referee_pub": "a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0"
+}
