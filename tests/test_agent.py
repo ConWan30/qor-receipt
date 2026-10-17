@@ -165,10 +165,10 @@ def test_replay_late_video_fails(tmp_path):
 
 def test_cli_replay_and_verify(session, tmp_path, capsys):
     out = tmp_path / "r.json"
-    assert main(["agent", "--replay", session["frames_dir"], "--hid-log", session["hid_log"], "--out", str(out)]) == 1  # SELF_ATTESTED
+    assert main(["agent", "--replay", session["frames_dir"], "--hid-log", session["hid_log"], "--out", str(out)]) == 0  # SELF_ATTESTED
     info = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
     assert info["verify"]["status"] == SELF_ATTESTED
-    assert main(["verify", str(out), "--referee-pub", info["referee_pub"]]) == 1
+    assert main(["verify", str(out), "--referee-pub", info["referee_pub"]]) == 0  # SELF_ATTESTED
 
 
 def test_committed_replay_vector_verifies():

@@ -1,6 +1,6 @@
 """QorTime CLI (commands: `qortime` or `qor-receipt`).
 
-  qor-receipt verify RECEIPT.json [--referee-pub HEX]     exit 0 VERIFIED, 1 PARTIAL|SELF_ATTESTED, 2 FAIL
+  qor-receipt verify RECEIPT.json [--referee-pub HEX]     exit 0 VERIFIED|SELF_ATTESTED, 1 PARTIAL, 2 FAIL
   qor-receipt emit --demo OUT.json [--mode dual|single]   build a fully synthetic signed receipt
   qor-receipt pattern NONCE                               show the button pattern for a nonce
   qor-receipt agent --device "USB3.0 Video" --referee URL  live capture agent (Windows, capture card + DualSense USB)
@@ -83,7 +83,7 @@ def main(argv: list[str] | None = None) -> int:
         with open(a.receipt, encoding="utf-8") as fh:
             out = verify_receipt(json.load(fh), referee_pub=a.referee_pub)
         print(json.dumps(out, indent=2))
-        return {FAIL: 2, PARTIAL: 1, SELF_ATTESTED: 1}.get(out["status"], 0)
+        return {FAIL: 2, PARTIAL: 1}.get(out["status"], 0)  # VERIFIED|SELF_ATTESTED -> 0
     if a.cmd == "emit":
         from qor_receipt.demo import demo_receipt
 
@@ -147,7 +147,7 @@ def _agent(a) -> int:
         with open(out, "w", encoding="utf-8") as fh:
             json.dump(r["receipt"], fh, indent=2)
         print(json.dumps({"wrote": out, "referee_pub": r["referee_pub"], "verify": r["verify"], "stats": r["stats"]}))
-        return {FAIL: 2, PARTIAL: 1, SELF_ATTESTED: 1}.get(r["verify"]["status"], 0)
+        return {FAIL: 2, PARTIAL: 1}.get(r["verify"]["status"], 0)  # VERIFIED|SELF_ATTESTED -> 0
     if not a.referee:
         print("live mode needs --referee URL (or use --replay)", file=sys.stderr)
         return 2
@@ -158,7 +158,7 @@ def _agent(a) -> int:
                  obs_text=a.obs_text, window=a.window)
     if r is None:
         return 1
-    return {FAIL: 2, PARTIAL: 1, SELF_ATTESTED: 1}.get(r["verify"]["status"], 0)
+    return {FAIL: 2, PARTIAL: 1}.get(r["verify"]["status"], 0)  # VERIFIED|SELF_ATTESTED -> 0
 
 
 if __name__ == "__main__":

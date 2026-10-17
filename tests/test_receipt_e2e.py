@@ -119,8 +119,8 @@ def test_cli_roundtrip(tmp_path, capsys):
     out = tmp_path / "r.json"
     assert main(["emit", "--demo", str(out)]) == 0
     pub = json.loads(capsys.readouterr().out)["referee_pub"]
-    assert main(["verify", str(out), "--referee-pub", pub]) == 1  # SELF_ATTESTED (demo key not allowlisted)
-    assert main(["verify", str(out)]) == 1
+    assert main(["verify", str(out), "--referee-pub", pub]) == 0  # SELF_ATTESTED (crypto ok; not allowlisted)
+    assert main(["verify", str(out)]) == 0  # SELF_ATTESTED unpinned
     r = json.loads(out.read_text()); r["result"]["away_score"] = 30; out.write_text(json.dumps(r))
     assert main(["verify", str(out), "--referee-pub", pub]) == 2
 
