@@ -1,6 +1,6 @@
 // node verify/test.mjs : JCS parity + JS verifier against the Python-produced vectors.
 import { readFileSync } from "node:fs";
-import { canonicalize, sha256Hex, verifyReceipt } from "./verify.js";
+import { canonicalize, sha256Hex, verifyReceipt, challengeEvidenceErrors } from "./verify.js";
 const v = JSON.parse(readFileSync(new URL("../tests/vectors/jcs_vector.json", import.meta.url)));
 let fails = 0;
 const ok = (c, m) => { console.log((c ? "ok   " : "FAIL ") + m); if (!c) fails++; };
@@ -19,4 +19,16 @@ ok((await verifyReceipt(t3, d.referee_pub)).status === "FAIL", "tier upgrade => 
 const a = JSON.parse(readFileSync(new URL("../tests/vectors/agent_replay_receipt.json", import.meta.url)));
 r = await verifyReceipt(a.receipt, a.referee_pub);
 ok(r.status === "SELF_ATTESTED" && r.trust_tier === "single-attested", "agent replay ephemeral referee => SELF_ATTESTED in JS");
+const bareOk = { issued_ms: 1000, deadline_ms: 20000, result: { ok: true, reason: "ok" } };
+const ev = challengeEvidenceErrors(bareOk, []);
+ok(ev.includes("challenge_missing_hid_sha256") && ev.includes("challenge_timing_incomplete")
+   && ev.includes("challenge_not_bound_to_live_checkpoint"),
+   "challengeEvidenceErrors rejects bare result.ok without HID/timing/checkpoint bind");
+const good = {
+  issued_ms: 1000, deadline_ms: 20000,
+  result: { ok: true, reason: "ok", pause_press_ms: 1500, done_ms: 2000, latency_ms: 80,
+            hid_sha256: "a".repeat(64) },
+};
+ok(challengeEvidenceErrors(good, [{ referee_ts_ms: 1600 }]).length === 0,
+   "challengeEvidenceErrors accepts HID+timing+live checkpoint");
 process.exit(fails ? 1 : 0);

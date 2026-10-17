@@ -99,6 +99,26 @@ function isNonnegInt(v) {
   return typeof v === "number" && Number.isSafeInteger(v) && v >= 0;
 }
 
+
+export function challengeEvidenceErrors(c, cps) {
+  const errs = [];
+  const res = c.result || {};
+  const hid = res.hid_sha256;
+  if (typeof hid !== "string" || hid.length !== 64 || !/^[0-9a-fA-F]{64}$/.test(hid)) errs.push("challenge_missing_hid_sha256");
+  const issued = c.issued_ms, deadline = c.deadline_ms;
+  const pause = res.pause_press_ms, done = res.done_ms, lat = res.latency_ms;
+  if (pause == null || done == null || lat == null) errs.push("challenge_timing_incomplete");
+  else {
+    if (!(issued <= pause && pause <= deadline)) errs.push("challenge_pause_outside_window");
+    if (done < pause) errs.push("challenge_done_before_pause");
+    if (!(lat >= 0 && lat <= 600)) errs.push("challenge_latency_out_of_range");
+  }
+  const winLo = issued - 3000, winHi = deadline + 5000;
+  const bound = (cps || []).some((cp) => typeof cp.referee_ts_ms === "number" && cp.referee_ts_ms >= winLo && cp.referee_ts_ms <= winHi);
+  if (!bound) errs.push("challenge_not_bound_to_live_checkpoint");
+  return errs;
+}
+
 export async function verifyReceipt(r, refereePub = null) {
   const errors = [], partial = [];
   let tier = null;
@@ -174,6 +194,9 @@ export async function verifyReceipt(r, refereePub = null) {
           else if (canonicalize(c.pattern) !== canonicalize(await patternFor(c.nonce, c.pattern.length - 1))) errors.push(`${role}:${ph}:pattern_not_from_nonce`);
           if (c.result == null) partial.push(`${role}:challenge_unanswered:${ph}`);
           else if (!c.result.ok) errors.push(`${role}:${ph}:challenge_failed:${c.result.reason}`);
+          else {
+            for (const e of challengeEvidenceErrors(c, r.checkpoints[role])) partial.push(`${role}:${ph}:${e}`);
+          }
         }
       }
       const mp = ((r.signals || {}).motion_permille || {})[role];

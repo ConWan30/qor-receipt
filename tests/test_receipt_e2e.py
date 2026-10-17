@@ -378,3 +378,49 @@ def test_official_allowlisted_referee_can_be_verified():
     v = verify_receipt(body, referee_pub=ref_key.pubkey_hex)
     assert v["status"] == VERIFIED, v
     assert v["referee_trust"] == "active" and v["referee_id"] == "qortime-v1"
+
+
+def test_challenge_ok_without_evidence_is_partial():
+    from pathlib import Path
+
+    from qor_receipt import receipt as R
+    from qor_receipt.challenge import new_nonce, pattern_for
+    from qor_receipt.checkpoints import Chain, countersign, window_hash
+    from qor_receipt.keys import SoftwareKey
+    from qor_receipt.receipt import PARTIAL, sign_player, sign_referee, verify_receipt
+
+    key_path = Path("/workspace/qortime-keys/qortime-referee-v1.key")
+    if not key_path.exists():
+        import pytest
+        pytest.skip("official referee private key not present on this box")
+    ref_key = SoftwareKey.from_seed_hex(key_path.read_text().strip())
+    player = SoftwareKey()
+    mid, start = "m-ev", 1_800_000_000_000
+    end = start + 20_000
+    ch, cps, t_ms = Chain(), [], start
+    while t_ms <= end:
+        cp = ch.next(t_ms, window_hash([b"e"]), window_hash([]))
+        cps.append(countersign(ref_key, mid, "home", cp, t_ms + 50))
+        t_ms += 4_000
+    chal = []
+    for i, ph in enumerate(("kickoff", "halftime", "end")):
+        n = new_nonce(); iss = start + i * 5_000
+        chal.append({"id": f"c{i}", "role": "home", "phase": ph, "nonce": n, "pattern": pattern_for(n),
+                     "issued_ms": iss, "deadline_ms": iss + 20_000,
+                     "result": {"ok": True, "reason": "ok"}})
+    body = R.build(
+        match={"match_id": mid, "game": "madden27", "platform": "ps5", "scorebug_profile": "madden27_standard",
+               "mode": "single", "started_ms": start, "ended_ms": end},
+        result={"home_score": 14, "away_score": 7, "quarter": 4, "final_t_ms": end - 50,
+                "winner": "home", "method": "agreed_scorebug_final"},
+        players=[{"role": "home", "player_id": "p", "pubkey": player.pubkey_hex, "key_kind": "software"}],
+        referee={"pubkey": ref_key.pubkey_hex, "key_id": ref_key.key_id, "key_kind": "software"},
+        challenges=chal, checkpoints={"home": cps},
+        agreement={"timelines_agree": None, "mismatches": []},
+        signals={"motion_permille": {"home": 500}},
+    )
+    body = sign_referee(body, ref_key)
+    body = sign_player(body, "home", player)
+    v = verify_receipt(body, referee_pub=ref_key.pubkey_hex)
+    assert v["status"] == PARTIAL
+    assert any("challenge_missing_hid_sha256" in p for p in v["partial"])
