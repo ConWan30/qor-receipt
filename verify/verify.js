@@ -10,6 +10,25 @@ const ALPHABET = ["CROSS", "CIRCLE", "SQUARE", "TRIANGLE", "UP", "DOWN", "LEFT",
 const MAX_GAP_MS = 10000, MAX_SKEW_MS = 3000, MOTION_MIN = 300;
 const DEFAULT_LEN = 4;
 const RESULT_METHODS = new Set(["agreed_scorebug_final", "end_menu_read", "last_scorebug_read_unconfirmed"]);
+const UNCONFIRMED = "last_scorebug_read_unconfirmed";
+
+// Same rules as qor_receipt.receipt.result_errors (tie / unknown winners, real quarter on unconfirmed reads).
+export function resultErrors(res) {
+  const errs = [];
+  const unconfirmed = res.method === UNCONFIRMED;
+  const h = res.home_score, a = res.away_score, q = res.quarter;
+  if (unconfirmed && h == null && a == null) {
+    if (res.winner !== "unknown") errs.push("winner_inconsistent");
+  } else if (!isNonnegInt(h) || !isNonnegInt(a)) errs.push("score_not_nonneg_int");
+  else {
+    const w = h > a ? "home" : a > h ? "away" : "tie";
+    if (res.winner !== w && !(w === "tie" && res.winner === "away")) errs.push("winner_inconsistent");
+  }
+  const qOk = typeof q === "number" && Number.isSafeInteger(q);
+  if (unconfirmed) { if (q != null && (!qOk || q < 1)) errs.push("quarter_invalid"); }
+  else if (!qOk || q < 4) errs.push("quarter_not_final");
+  return errs;
+}
 const ROLES = new Set(["home", "away"]);
 const LOCAL_REFEREE_PREFIXES = ["local-self-attested"];
 const UNVERIFIED_KIND_CLAIMS = new Set(["tpm"]);
@@ -385,9 +404,7 @@ export async function verifyReceipt(r, refereePub = null, opts = {}) {
     }
     if (m.mode === "dual" && (r.agreement || {}).timelines_agree !== true) errors.push("dual_timelines_disagree");
     const res = r.result;
-    if (!isNonnegInt(res.home_score) || !isNonnegInt(res.away_score)) errors.push("score_not_nonneg_int");
-    else if (res.winner !== (res.home_score > res.away_score ? "home" : "away")) errors.push("winner_inconsistent");
-    if (typeof res.quarter !== "number" || !Number.isSafeInteger(res.quarter) || res.quarter < 4) errors.push("quarter_not_final");
+    for (const e of resultErrors(res)) errors.push(e);
     if (!RESULT_METHODS.has(res.method)) errors.push("bad_result_method");
     tier = computeTier(r);
     if (r.trust_tier !== tier) errors.push("trust_tier_claim_wrong");

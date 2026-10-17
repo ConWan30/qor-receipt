@@ -163,7 +163,7 @@ def create_app(key: SoftwareKey | None = None, clock: Callable[[], int] | None =
             match={"match_id": mid, "game": m["game"], "platform": m["platform"], "scorebug_profile": "madden27_standard",
                    "mode": mode, "started_ms": m["started_ms"], "ended_ms": now()},
             result={"home_score": f.home, "away_score": f.away, "quarter": f.quarter, "final_t_ms": f.t_ms,
-                    "winner": "home" if f.home > f.away else "away", "method": "agreed_scorebug_final",
+                    "winner": R.winner_for(f.home, f.away), "method": "agreed_scorebug_final",
                     "final_basis": weakest_basis(x.basis for x in finals.values())},
             players=[m["players"][r] for r in roles],
             referee={"pubkey": key.pubkey_hex, "key_id": key.key_id, "key_kind": key.kind},

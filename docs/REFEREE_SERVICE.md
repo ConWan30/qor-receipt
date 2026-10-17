@@ -151,4 +151,6 @@ QORTIME_REFEREE_SEED=<hex> QORCAP_SIDECAR=/path/to/qorcap/sidecar qortime refere
 - After the deploy, `/health` reported `delegation.valid: true`, serial 1 and 59 days left. `/v1/referee` reported pubkey
   `ab1f6e2c…`. An unsigned `POST /v1/submissions` returned 426 with the upgrade message.
 - The referee image pins the QorCap sidecar at `739efbf`, which includes the Monday Night pack (`madden27_monday_night_v1.npz`).
+- Since QorCap `67853bf` (v0.3.11, PR #17), the image also pins Sunday Night (`madden27_sunday_night`, QorCap `qorcap_snp.py` + `madden27_sunday_night_v1.npz`) and Thursday Night
+  (`madden27_thursday_night`, `qorcap_tnp.py` + `madden27_thursday_night_v1.npz`); the Dockerfile `test -f`s both so a stale pin fails the build.
   `/v1/referee` now reports `scorebug_profiles`.

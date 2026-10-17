@@ -19,6 +19,10 @@ Status: draft v0. Schema: [`schema/receipt.v0.json`](../schema/receipt.v0.json).
   `scorebug_profile` (`madden27_standard`, the vendored Qoresence profile), `mode` (`dual` or `single`),
   `started_ms` and `ended_ms` (referee clock, Unix ms).
 * `result`: `home_score`, `away_score`, `quarter` (≥4; 5 = OT), `final_t_ms`, `winner`, `method` = `agreed_scorebug_final`, optional `final_basis` (§5).
+  `winner` follows the score: `home`, `away`, or `tie` on equal scores (a legacy `away` on a tie is still accepted).
+  With `method` = `last_scorebug_read_unconfirmed` (no final was detected) `quarter` is the quarter the last read showed
+  (≥1) or `null`, and when nothing was read at all `home_score`/`away_score` are `null` with `winner` = `unknown`;
+  such receipts are never a final, and nothing is invented (2026-10-17: previously a 0-0 "away" win in Q4).
 * `players[]`: `role` (`home` or `away`), `player_id` (e.g. `psn:<id>`), `pubkey`, `key_kind`
   (`software`, `software-file` or `tpm`).
 * `referee`: `pubkey`, `key_id`, `key_kind`.

@@ -95,6 +95,10 @@ def sidecar_profiles(sidecar_dir: str | None = None) -> list[str]:
     d = sidecar_dir or os.getenv("QORCAP_SIDECAR")
     if d and (Path(d) / "qorcap_mnp.py").exists() and (Path(d) / "packs" / "madden27_monday_night_v1.npz").exists():
         out.append("madden27_monday_night")
+    if d and (Path(d) / "qorcap_snp.py").exists() and (Path(d) / "packs" / "madden27_sunday_night_v1.npz").exists():
+        out.append("madden27_sunday_night")
+    if d and (Path(d) / "qorcap_tnp.py").exists() and (Path(d) / "packs" / "madden27_thursday_night_v1.npz").exists():
+        out.append("madden27_thursday_night")
     return out
 
 
