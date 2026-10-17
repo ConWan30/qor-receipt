@@ -16,7 +16,7 @@ import json
 import sys
 
 from qor_receipt.challenge import pattern_for
-from qor_receipt.receipt import FAIL, PARTIAL, SELF_ATTESTED, verify_receipt
+from qor_receipt.receipt import FAIL, PARTIAL, verify_receipt
 
 
 def main(argv: list[str] | None = None) -> int:
