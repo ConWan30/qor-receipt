@@ -1,6 +1,6 @@
 // node verify/test.mjs : JCS parity + JS verifier against the Python-produced vectors.
 import { readFileSync } from "node:fs";
-import { canonicalize, sha256Hex, verifyReceipt, challengeEvidenceErrors } from "./verify.js";
+import { canonicalize, sha256Hex, verifyReceipt, challengeEvidenceErrors, inputProofAdvisory } from "./verify.js";
 const v = JSON.parse(readFileSync(new URL("../tests/vectors/jcs_vector.json", import.meta.url)));
 let fails = 0;
 const ok = (c, m) => { console.log((c ? "ok   " : "FAIL ") + m); if (!c) fails++; };
@@ -31,4 +31,10 @@ const good = {
 };
 ok(challengeEvidenceErrors(good, [{ referee_ts_ms: 1600 }]).length === 0,
    "challengeEvidenceErrors accepts HID+timing+live checkpoint");
+const advOk = inputProofAdvisory({ input: { human_permille: 700, match_permille: 500, chance_permille: 100,
+  haptic_events: 3, haptic_high_confidence: 2, inputs_sha256: "c".repeat(64) } });
+ok(advOk && advOk.ok, "inputProofAdvisory accepts strong human/align/haptic signals");
+const advBad = inputProofAdvisory({ input: { human_permille: 50, match_permille: 10, chance_permille: 200, haptic_events: 0 } });
+ok(advBad && !advBad.ok && advBad.flags.includes("human_score_low"), "inputProofAdvisory flags weak signals (advisory only)");
 process.exit(fails ? 1 : 0);
+

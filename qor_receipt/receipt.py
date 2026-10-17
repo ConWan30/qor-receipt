@@ -98,11 +98,81 @@ def _challenge_evidence_errors(c: dict[str, Any], cps: list[dict[str, Any]]) -> 
     return errs
 
 
+# Advisory thresholds for signals.input (QorCap input_proof) — never gates VERIFIED alone.
+INPUT_HUMAN_MIN = 400          # human_permille: below = "machine-like / low"
+INPUT_ALIGN_EDGE = 50          # match_permille must beat chance_permille by this margin
+INPUT_HAPTIC_MIN = 1           # at least one high-confidence haptic if haptics claimed
+
+
+def _input_proof_advisory(signals: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Fold QorCap ``signals.input`` into verify as signed advisory evidence (not proof).
+
+    Returns None when no input block is present. Never raises; missing fields → caution notes.
+    """
+    if not isinstance(signals, dict):
+        return None
+    inp = signals.get("input")
+    if not isinstance(inp, dict) or not inp:
+        return None
+    notes: list[str] = []
+    flags: list[str] = []
+    human = inp.get("human_permille")
+    label = inp.get("human_label")
+    if isinstance(human, int):
+        if human < INPUT_HUMAN_MIN:
+            flags.append("human_score_low")
+            notes.append(f"human_permille={human} below advisory floor {INPUT_HUMAN_MIN}"
+                         + (f" ({label})" if label else ""))
+        else:
+            notes.append(f"human_permille={human}" + (f" ({label})" if label else ""))
+    else:
+        flags.append("human_score_missing")
+    match_p, chance_p = inp.get("match_permille"), inp.get("chance_permille")
+    if isinstance(match_p, int) and isinstance(chance_p, int):
+        if match_p < chance_p + INPUT_ALIGN_EDGE:
+            flags.append("alignment_not_above_chance")
+            notes.append(f"alignment match={match_p} chance={chance_p} (need +{INPUT_ALIGN_EDGE})")
+        else:
+            notes.append(f"alignment match={match_p} vs chance={chance_p} (ok)")
+    else:
+        flags.append("alignment_missing")
+    he = inp.get("haptic_events")
+    hc = inp.get("haptic_high_confidence")
+    if isinstance(he, int):
+        if he <= 0:
+            flags.append("no_haptic_events")
+            notes.append("no haptic events recorded")
+        elif isinstance(hc, int) and hc < INPUT_HAPTIC_MIN:
+            flags.append("haptic_low_confidence_only")
+            notes.append(f"haptic_events={he} but high_confidence={hc}")
+        else:
+            notes.append(f"haptic_events={he} high_confidence={hc}")
+    # Signed hashes present? advisory only
+    if not inp.get("inputs_sha256"):
+        flags.append("inputs_sha256_missing")
+    ok = not any(f in flags for f in (
+        "human_score_low", "alignment_not_above_chance", "no_haptic_events", "haptic_low_confidence_only"))
+    return {
+        "present": True,
+        "ok": ok,
+        "flags": flags,
+        "notes": notes,
+        "status": inp.get("status"),
+        "human_permille": human,
+        "match_permille": match_p,
+        "chance_permille": chance_p,
+        "haptic_events": he,
+        "haptic_high_confidence": hc,
+        "claims": "advisory evidence only — not cryptographic proof of a human player",
+    }
+
+
 def verify_receipt(r: dict[str, Any], *, referee_pub: str | None = None,
                    allowlist_path: str | None = None) -> dict[str, Any]:
     errors: list[str] = []
     partial: list[str] = []
     trusted_ref = False
+    input_advisory = _input_proof_advisory(r.get("signals") if isinstance(r, dict) else None)
     referee_entry: dict[str, Any] | None = None
     try:
         if r.get("schema") != SCHEMA:
@@ -237,7 +307,8 @@ def verify_receipt(r: dict[str, Any], *, referee_pub: str | None = None,
         status = VERIFIED
 
     out = {"status": status, "trust_tier": tier, "errors": errors, "partial": partial,
-           "referee_trust": ("active" if trusted_ref else ("revoked" if referee_entry and referee_entry.get("status") == "revoked" else "untrusted"))}
+           "referee_trust": ("active" if trusted_ref else ("revoked" if referee_entry and referee_entry.get("status") == "revoked" else "untrusted")),
+           "input_advisory": input_advisory}
     if referee_entry:
         out["referee_id"] = referee_entry.get("id")
     return out

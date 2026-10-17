@@ -119,10 +119,45 @@ export function challengeEvidenceErrors(c, cps) {
   return errs;
 }
 
+
+const INPUT_HUMAN_MIN = 400;
+const INPUT_ALIGN_EDGE = 50;
+const INPUT_HAPTIC_MIN = 1;
+
+export function inputProofAdvisory(signals) {
+  if (!signals || typeof signals !== "object") return null;
+  const inp = signals.input;
+  if (!inp || typeof inp !== "object") return null;
+  const notes = [], flags = [];
+  const human = inp.human_permille, label = inp.human_label;
+  if (typeof human === "number") {
+    if (human < INPUT_HUMAN_MIN) { flags.push("human_score_low"); notes.push(`human_permille=${human} below advisory floor ${INPUT_HUMAN_MIN}` + (label ? ` (${label})` : "")); }
+    else notes.push(`human_permille=${human}` + (label ? ` (${label})` : ""));
+  } else flags.push("human_score_missing");
+  const matchP = inp.match_permille, chanceP = inp.chance_permille;
+  if (typeof matchP === "number" && typeof chanceP === "number") {
+    if (matchP < chanceP + INPUT_ALIGN_EDGE) { flags.push("alignment_not_above_chance"); notes.push(`alignment match=${matchP} chance=${chanceP} (need +${INPUT_ALIGN_EDGE})`); }
+    else notes.push(`alignment match=${matchP} vs chance=${chanceP} (ok)`);
+  } else flags.push("alignment_missing");
+  const he = inp.haptic_events, hc = inp.haptic_high_confidence;
+  if (typeof he === "number") {
+    if (he <= 0) { flags.push("no_haptic_events"); notes.push("no haptic events recorded"); }
+    else if (typeof hc === "number" && hc < INPUT_HAPTIC_MIN) { flags.push("haptic_low_confidence_only"); notes.push(`haptic_events=${he} but high_confidence=${hc}`); }
+    else notes.push(`haptic_events=${he} high_confidence=${hc}`);
+  }
+  if (!inp.inputs_sha256) flags.push("inputs_sha256_missing");
+  const bad = ["human_score_low", "alignment_not_above_chance", "no_haptic_events", "haptic_low_confidence_only"];
+  const ok = !flags.some((f) => bad.includes(f));
+  return { present: true, ok, flags, notes, status: inp.status, human_permille: human, match_permille: matchP,
+           chance_permille: chanceP, haptic_events: he, haptic_high_confidence: hc,
+           claims: "advisory evidence only — not cryptographic proof of a human player" };
+}
+
 export async function verifyReceipt(r, refereePub = null) {
   const errors = [], partial = [];
   let tier = null;
   let trustedRef = false;
+  const inputAdvisory = inputProofAdvisory(r && r.signals);
   let refereeEntry = null;
   try {
     if (r.schema !== SCHEMA) return { status: "FAIL", trust_tier: null, errors: ["schema"], partial: [], referee_trust: "unknown" };
@@ -224,6 +259,7 @@ export async function verifyReceipt(r, refereePub = null) {
   const out = {
     status, trust_tier: tier, errors, partial,
     referee_trust: trustedRef ? "active" : (refereeEntry && refereeEntry.status === "revoked" ? "revoked" : "untrusted"),
+    input_advisory: inputAdvisory,
   };
   if (refereeEntry) out.referee_id = refereeEntry.id;
   return out;
