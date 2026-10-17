@@ -65,6 +65,39 @@ def _is_nonneg_int(v: Any) -> bool:
     return isinstance(v, int) and not isinstance(v, bool) and v >= 0
 
 
+
+def _challenge_evidence_errors(c: dict[str, Any], cps: list[dict[str, Any]]) -> list[str]:
+    """Evidence required when result.ok is claimed. Without HID bytes in the receipt we cannot
+    re-run verify_response; we require a HID commitment, sane timing, and a countersigned
+    checkpoint whose referee clock falls inside the challenge window (referee was live)."""
+    errs: list[str] = []
+    res = c.get("result") or {}
+    hid = res.get("hid_sha256")
+    if not isinstance(hid, str) or len(hid) != 64 or any(ch not in "0123456789abcdef" for ch in hid.lower()):
+        errs.append("challenge_missing_hid_sha256")
+    try:
+        issued, deadline = int(c["issued_ms"]), int(c["deadline_ms"])
+        pause = res.get("pause_press_ms")
+        done = res.get("done_ms")
+        lat = res.get("latency_ms")
+    except (KeyError, TypeError, ValueError):
+        return errs + ["challenge_timing_malformed"]
+    if pause is None or done is None or lat is None:
+        errs.append("challenge_timing_incomplete")
+    else:
+        if not (issued <= int(pause) <= deadline):
+            errs.append("challenge_pause_outside_window")
+        if int(done) < int(pause):
+            errs.append("challenge_done_before_pause")
+        if not (0 <= int(lat) <= 600):
+            errs.append("challenge_latency_out_of_range")
+    # Live referee: at least one countersigned checkpoint stamped during the challenge window.
+    win_lo, win_hi = issued - 3_000, deadline + 5_000
+    if not any(isinstance(cp.get("referee_ts_ms"), int) and win_lo <= cp["referee_ts_ms"] <= win_hi for cp in (cps or [])):
+        errs.append("challenge_not_bound_to_live_checkpoint")
+    return errs
+
+
 def verify_receipt(r: dict[str, Any], *, referee_pub: str | None = None,
                    allowlist_path: str | None = None) -> dict[str, Any]:
     errors: list[str] = []
@@ -161,6 +194,12 @@ def verify_receipt(r: dict[str, Any], *, referee_pub: str | None = None,
                         partial.append(f"{role}:challenge_unanswered:{ph}")
                     elif not res.get("ok"):
                         errors.append(f"{role}:{ph}:challenge_failed:{res.get('reason')}")
+                    else:
+                        # Do not trust bare result.ok: require committed evidence + live referee window.
+                        ev_errs = _challenge_evidence_errors(c, r["checkpoints"].get(role, []))
+                        if ev_errs:
+                            for e in ev_errs:
+                                partial.append(f"{role}:{ph}:{e}")
             mp = (r.get("signals") or {}).get("motion_permille", {}).get(role)
             if mp is None:
                 partial.append(f"{role}:motion_signal_missing")
