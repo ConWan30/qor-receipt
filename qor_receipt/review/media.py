@@ -89,6 +89,15 @@ def decode_run(b: Bundle, run: list[int], read_seg: Callable[[int], bytes | None
 
 
 # ---------------------------------------------------------------- final re-read (QorCap's own readers)
+def sidecar_profiles(sidecar_dir: str | None = None) -> list[str]:
+    """Scorebug profiles the referee can read: QorTime's vendored standard pack + packs shipped in the QorCap sidecar."""
+    out = ["madden27_standard"]
+    d = sidecar_dir or os.getenv("QORCAP_SIDECAR")
+    if d and (Path(d) / "qorcap_mnp.py").exists() and (Path(d) / "packs" / "madden27_monday_night_v1.npz").exists():
+        out.append("madden27_monday_night")
+    return out
+
+
 def sidecar_core_factory(sidecar_dir: str | None = None):
     """ReaderCore exactly as QorCap builds it (scorebug + end-of-game menu readers), imported from a pinned QorCap
     sidecar checkout (``$QORCAP_SIDECAR``). Returns None when unavailable (the review then fails closed)."""

@@ -137,3 +137,18 @@ Local run:
 pip install -e ".[referee,vision]"
 QORTIME_REFEREE_SEED=<hex> QORCAP_SIDECAR=/path/to/qorcap/sidecar qortime referee-service --port 8080
 ```
+
+### Hardening deployment record (2026-10-16 CDT, PR #27)
+
+- Online key `qortime-online-s1` (pubkey `ab1f6e2c…e567`, key_id `5443cbdc7f94ad26`) was created on the operator box at
+  `qortime-keys/online/` (0600). Delegation serial 1 is signed by root `qortime-v1` and published as
+  `trust/delegations/serial-1.json`. It expires 2026-12-15, so rotate before then with `scripts/referee_keys.py delegate`.
+- These Railway variables were set by substituting file contents at call time, so no value was printed:
+  `QORTIME_SERVICE_SEED`, `QORTIME_DELEGATION`, `QORTIME_REFEREE_ID=qortime-online-s1` and `QORTIME_STATE_DIR=/data`.
+  `QORTIME_REFEREE_SEED` (the root seed) was overwritten with an empty string. The API token can't delete the variable
+  itself, so that still needs to be done in the dashboard. Volume `qortime-referee-state` (68877173…) is mounted at
+  `/data`.
+- After the deploy, `/health` reported `delegation.valid: true`, serial 1 and 59 days left. `/v1/referee` reported pubkey
+  `ab1f6e2c…`. An unsigned `POST /v1/submissions` returned 426 with the upgrade message.
+- The referee image pins the QorCap sidecar at `739efbf`, which includes the Monday Night pack (`madden27_monday_night_v1.npz`).
+  `/v1/referee` now reports `scorebug_profiles`.

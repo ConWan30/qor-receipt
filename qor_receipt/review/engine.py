@@ -115,6 +115,7 @@ class Referee:
         return {"id": self.referee_id, "pubkey": self.key.pubkey_hex, "key_id": self.key.key_id, "key_kind": REVIEW_KEY_KIND,
                 "review_type": REVIEW_TYPE, "final_reader": self.core_factory is not None,
                 "ffmpeg": M.ffmpeg_bin() is not None,
+                "scorebug_profiles": M.sidecar_profiles(self.sidecar_dir) if self.core_factory is not None else [],
                 "policy": {"random_segments": self.random_segments, "tail_ms": self.tail_ms, "modes": [SPOT, FULL]},
                 "delegation": self.delegation,
                 "log": ({"size": len(self.log.entries), "head": self.log.head} if self.log is not None else None)}
