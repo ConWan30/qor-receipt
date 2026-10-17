@@ -9,6 +9,7 @@
   qortime referee-ai BUNDLE [--vision scorebug|meta|none] [--no-jev]   AI referee verdict (exit 0 accept, 1 abstain, 2 dispute)
   qortime referee-ai-verify VERDICT.json [--pub HEX]      check a signed referee verdict
   qortime index BUNDLE [--video V] [--out DIR]            play-by-play match index + burst frames + viewer.html
+  qortime referee-service [--host H] [--port P]           official referee service (verified uploads); key from env
 """
 from __future__ import annotations
 
@@ -68,7 +69,17 @@ def main(argv: list[str] | None = None) -> int:
     ix.add_argument("--out", default="qt-index", help="output dir")
     ix.add_argument("--no-frames", action="store_true")
     ix.add_argument("--force", action="store_true", help="ignore cached match_index.json")
+    rs = sub.add_parser("referee-service", help="official referee service for verified uploads (QORTIME_REFEREE_SEED env)")
+    rs.add_argument("--host", default="0.0.0.0")
+    rs.add_argument("--port", type=int, default=int(__import__("os").getenv("PORT", "8080")))
     a = ap.parse_args(argv)
+    if a.cmd == "referee-service":
+        import uvicorn
+
+        from qor_receipt.referee_service.app import create_app
+
+        uvicorn.run(create_app(), host=a.host, port=a.port)
+        return 0
     if a.cmd == "index":
         from qor_receipt.match_index import build_index
 

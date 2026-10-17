@@ -1,0 +1,565 @@
+"""Referee review engine: submissions, spot-check plan, segment verification, review, official countersign.
+
+HTTP-free so tests can drive it directly; ``qor_receipt.referee_service.app`` wraps it in FastAPI.
+"""
+from __future__ import annotations
+
+import copy
+import hashlib
+import json
+import secrets
+import shutil
+import statistics
+import time
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Callable
+
+from qor_receipt import receipt as R
+from qor_receipt.challenge import (
+    DEFAULT_DEADLINE_MS,
+    PHASES,
+    motion_correlation_permille,
+    new_nonce,
+    pattern_for,
+    verify_response,
+)
+from qor_receipt.jcs import canonicalize, sha256_hex
+from qor_receipt.keys import KeyProvider, kid, verify
+from qor_receipt.review import bundle as B
+from qor_receipt.review import media as M
+from qor_receipt.review.policy import (
+    ANCHOR_TYPE,
+    CHALLENGE_TOKEN_TYPE,
+    FAIL_CHECK,
+    MAX_SEGMENT_BYTES,
+    NOT_PROVEN,
+    PARTIAL_CHECK,
+    PASS,
+    RANDOM_SEGMENTS,
+    REVIEW_KEY_KIND,
+    REVIEW_TYPE,
+    TAIL_MS,
+)
+
+SPOT, FULL = "spot-check", "full"
+TAIL_HZ = 2.0
+MOTION_HZ = 10.0
+ANCHOR_SLACK_MS = 5_000
+
+
+def _token_payload(tok: dict[str, Any]) -> bytes:
+    return canonicalize({k: v for k, v in tok.items() if k != "sig"})
+
+
+def verify_token(tok: Any, pubkey_hex: str, typ: str) -> bool:
+    """Signed challenge / anchor token issued by the referee key ``pubkey_hex``."""
+    if not isinstance(tok, dict) or tok.get("type") != typ or not isinstance(tok.get("sig"), str):
+        return False
+    if tok.get("key_id") != kid(pubkey_hex):
+        return False
+    return verify(pubkey_hex, tok["sig"], _token_payload(tok))
+
+
+@dataclass
+class Submission:
+    id: str
+    dir: Path
+    mode: str
+    created_ms: int
+    upload_token: str
+    bundle: B.Bundle
+    state: str = "new"  # rejected | awaiting_segments | refused | awaiting_player_signature | complete
+    errors: list[str] = field(default_factory=list)
+    commit: str | None = None
+    required: list[int] = field(default_factory=list)
+    decode: set[int] = field(default_factory=set)       # segments kept on disk for decoding
+    random_sample: list[int] = field(default_factory=list)
+    received: dict[int, int] = field(default_factory=dict)  # seq -> bytes verified
+    bad: dict[int, str] = field(default_factory=dict)
+    review: dict[str, Any] | None = None
+    receipt: dict[str, Any] | None = None
+    verify: dict[str, Any] | None = None
+
+    def public(self) -> dict[str, Any]:
+        missing = [s for s in self.required if s not in self.received]
+        return {"id": self.id, "state": self.state, "mode": self.mode, "errors": self.errors, "commit": self.commit,
+                "segments_total": len(self.bundle.segments), "required": self.required, "missing": missing[:50],
+                "missing_count": len(missing), "received": len(self.received), "bad_segments": self.bad,
+                "bytes_required": sum(int(self.bundle.segments[s]["bytes"]) for s in self.required),
+                "review": self.review, "verify": self.verify}
+
+
+class Referee:
+    def __init__(self, key: KeyProvider, *, workdir: str | Path, now: Callable[[], int] | None = None,
+                 rng: Any = None, core_factory: Any = "sidecar", sidecar_dir: str | None = None,
+                 random_segments: int = RANDOM_SEGMENTS, tail_ms: int = TAIL_MS, referee_id: str = "qortime-v1") -> None:
+        self.key = key
+        self.workdir = Path(workdir)
+        self.workdir.mkdir(parents=True, exist_ok=True)
+        self.now = now or (lambda: int(time.time() * 1000))
+        self.rng = rng or secrets.SystemRandom()
+        self.sidecar_dir = sidecar_dir
+        self.core_factory = M.sidecar_core_factory(sidecar_dir) if core_factory == "sidecar" else core_factory
+        self.random_segments = random_segments
+        self.tail_ms = tail_ms
+        self.referee_id = referee_id
+        self.subs: dict[str, Submission] = {}
+
+    # ------------------------------------------------------------ info / live tokens
+    def info(self) -> dict[str, Any]:
+        return {"id": self.referee_id, "pubkey": self.key.pubkey_hex, "key_id": self.key.key_id, "key_kind": REVIEW_KEY_KIND,
+                "review_type": REVIEW_TYPE, "final_reader": self.core_factory is not None,
+                "ffmpeg": M.ffmpeg_bin() is not None,
+                "policy": {"random_segments": self.random_segments, "tail_ms": self.tail_ms, "modes": [SPOT, FULL]}}
+
+    def _sign_token(self, tok: dict[str, Any]) -> dict[str, Any]:
+        tok = dict(tok, key_id=self.key.key_id)
+        tok["sig"] = self.key.sign(_token_payload(tok))
+        return tok
+
+    def issue_challenge(self, phase: str, role: str = "home", match_id: str = "", anchor: dict | None = None,
+                        nonce: str | None = None) -> dict[str, Any]:
+        if phase not in PHASES or role not in ("home", "away"):
+            raise ValueError("bad phase/role")
+        t = self.now()
+        n = nonce or new_nonce()
+        return self._sign_token({"type": CHALLENGE_TOKEN_TYPE, "nonce": n, "pattern": pattern_for(n), "phase": phase,
+                                 "role": role, "match_id": str(match_id)[:128], "issued_ms": t,
+                                 "deadline_ms": t + DEFAULT_DEADLINE_MS, "anchor": _clean_anchor(anchor)})
+
+    def issue_anchor(self, match_id: str, anchor: dict) -> dict[str, Any]:
+        a = _clean_anchor(anchor)
+        if not a:
+            raise ValueError("anchor needs chain_head")
+        return self._sign_token({"type": ANCHOR_TYPE, "match_id": str(match_id)[:128], **a, "referee_ts_ms": self.now()})
+
+    # ------------------------------------------------------------ submissions
+    def create(self, files: dict[str, bytes], mode: str = SPOT) -> Submission:
+        if mode not in (SPOT, FULL):
+            raise ValueError("mode must be spot-check or full")
+        sid = secrets.token_hex(8)
+        d = self.workdir / sid
+        (d / "meta").mkdir(parents=True)
+        (d / "segs").mkdir()
+        for name, data in files.items():
+            (d / "meta" / name).write_bytes(data)
+        sub = Submission(id=sid, dir=d, mode=mode, created_ms=self.now(), upload_token=secrets.token_urlsafe(24),
+                         bundle=B.load(files))
+        self.subs[sid] = sub
+        errs = self._precheck(sub)
+        if errs:
+            sub.state, sub.errors = "rejected", errs
+            return sub
+        self._plan(sub)
+        sub.state = "awaiting_segments"
+        return sub
+
+    def _precheck(self, sub: Submission) -> list[str]:
+        b = sub.bundle
+        errs = list(b.errors)
+        if errs:
+            return errs
+        errs += B.check_manifest(b)
+        by_seg, e = B.check_inputs(b)
+        errs += e
+        errs += B.check_checkpoints(b, by_seg)
+        errs += B.check_receipt_binding(b)
+        _, e = B.check_input_files(b)
+        errs += e
+        r = b.receipt
+        ref = r.get("referee") or {}
+        if str(ref.get("pubkey", "")).lower() == self.key.pubkey_hex.lower():
+            errs.append("receipt is already signed by the official referee")
+        players = r.get("players") or []
+        if len(players) != 1 or (r.get("match") or {}).get("mode") != "single":
+            errs.append("only single-console bundles are supported by the review service")
+        # The laptop's own receipt must be internally sound under its own keys (signatures, chain timing, result).
+        v = R.verify_receipt(r, referee_pub=ref.get("pubkey"))
+        errs += [f"local_receipt:{x}" for x in v.get("errors", [])]
+        return errs
+
+    def _wall_minus_mono(self, b: B.Bundle) -> int:
+        diffs = [int(m["wall_ms"]) - int(m["mono_ms"]) for m in b.segments if "wall_ms" in m and "mono_ms" in m]
+        return int(statistics.median(diffs)) if diffs else (B.wall_anchor(b) or 0)
+
+    def _plan(self, sub: Submission) -> None:
+        b = sub.bundle
+        segs = b.segments
+        sub.commit = sha256_hex({"chain_head": b.chain_head, "checkpoint_head": b.checkpoints[-1]["hash"],
+                                 "input_head": b.input_head, "files": {k: B.file_sha(v) for k, v in sorted(b.files.items())},
+                                 "mode": sub.mode, "submission": sub.id})
+        inits = {int(m["seq"]) for m in segs if int(m.get("offset", 0)) == 0}
+        last_file = segs[-1]["file"]
+        end_mono = int(segs[-1]["mono_ms"])
+        tail = {int(m["seq"]) for m in segs if m["file"] == last_file and int(m["mono_ms"]) >= end_mono - self.tail_ms}
+        wmm = self._wall_minus_mono(b)
+        chal: set[int] = set()
+        presses = B.press_events(b)
+        for c in b.receipt.get("challenges") or []:
+            chal |= set(_challenge_seqs(b, c, presses, wmm))
+        fixed = inits | tail | chal
+        pool = [int(m["seq"]) for m in segs if int(m["seq"]) not in fixed]
+        # Drawn only now, after the manifest/checkpoints/inputs are committed (sub.commit), from the referee's RNG.
+        sub.random_sample = sorted(self.rng.sample(pool, min(self.random_segments, len(pool))))
+        sub.decode = fixed | set(sub.random_sample)
+        sub.required = sorted(range(len(segs))) if sub.mode == FULL else sorted(sub.decode)
+        (sub.dir / "plan.json").write_text(json.dumps({"commit": sub.commit, "required": sub.required,
+                                                       "random": sub.random_sample, "tail": sorted(tail),
+                                                       "challenge": sorted(chal), "init": sorted(inits)}))
+
+    def put_segment(self, sub: Submission, seq: int, chunks) -> dict[str, Any]:
+        """Stream one segment's bytes; hash against the committed manifest. ``chunks`` is an iterable of bytes."""
+        if sub.state != "awaiting_segments":
+            raise ValueError(f"submission is {sub.state}")
+        if seq < 0 or seq >= len(sub.bundle.segments):
+            raise ValueError("no such segment")
+        if sub.mode == SPOT and seq not in sub.decode:
+            raise ValueError("segment not requested")
+        m = sub.bundle.segments[seq]
+        want_len, want_sha = int(m["bytes"]), str(m["sha256"])
+        h, n = hashlib.sha256(), 0
+        keep = seq in sub.decode
+        tmp = sub.dir / "segs" / f"{seq}.part"
+        fh = open(tmp, "wb") if keep else None
+        try:
+            for c in chunks:
+                n += len(c)
+                if n > min(want_len, MAX_SEGMENT_BYTES):
+                    raise ValueError("segment larger than the manifest says")
+                h.update(c)
+                if fh:
+                    fh.write(c)
+        finally:
+            if fh:
+                fh.close()
+        ok = n == want_len and h.hexdigest() == want_sha
+        if not ok:
+            sub.bad[seq] = "sha256/length mismatch: bytes differ from the committed manifest"
+            tmp.unlink(missing_ok=True)
+            return {"seq": seq, "ok": False, "error": sub.bad[seq]}
+        sub.bad.pop(seq, None)
+        if keep:
+            tmp.rename(sub.dir / "segs" / f"{seq}.bin")
+        sub.received[seq] = n
+        return {"seq": seq, "ok": True, "bytes": n, "remaining": len([s for s in sub.required if s not in sub.received])}
+
+    def _read_seg(self, sub: Submission):
+        def rd(seq: int) -> bytes | None:
+            p = sub.dir / "segs" / f"{seq}.bin"
+            return p.read_bytes() if p.exists() else None
+        return rd
+
+    # ------------------------------------------------------------ review
+    def review(self, sub: Submission) -> dict[str, Any]:
+        if sub.state == "awaiting_player_signature" or sub.state == "complete":
+            return sub.public()
+        if sub.state != "awaiting_segments":
+            raise ValueError(f"submission is {sub.state}")
+        b = sub.bundle
+        checks: dict[str, dict[str, Any]] = {}
+        wmm = self._wall_minus_mono(b)
+        missing = [s for s in sub.required if s not in sub.received]
+        total_bytes = sum(int(m["bytes"]) for m in b.segments)
+        verified_bytes = sum(sub.received.values())
+        k = len(sub.random_sample)
+        checks["bundle_structure"] = {"state": PASS, "detail": "manifest chain, checkpoint chain, inputs chain and "
+                                      "receipt binding recomputed by the referee"}
+        checks["capture_chain"] = {"state": PASS, "detail": "laptop checkpoint countersignatures valid under the capture "
+                                   "key; gaps/skew within limits (timing is the laptop's own clock)"}
+        vb: dict[str, Any] = {"method": sub.mode, "segments_total": len(b.segments), "segments_verified": len(sub.received),
+                              "bytes_total": total_bytes, "bytes_verified": verified_bytes, "random_segments": k,
+                              "random_sample": sub.random_sample, "commit": sub.commit}
+        if sub.mode == SPOT:
+            vb["p_undetected_if_missing_10pct"] = f"{0.9 ** k:.3g}"
+            vb["p_undetected_if_missing_50pct"] = f"{0.5 ** k:.3g}"
+        if missing or sub.bad:
+            vb["missing"] = missing[:50]
+            vb["bad"] = sub.bad
+            checks["video_bytes"] = {"state": FAIL_CHECK, "detail": vb}
+        else:
+            checks["video_bytes"] = {"state": PASS, "detail": vb}
+
+        rd = self._read_seg(sub)
+        # ---- final re-read from the referee's own decode of the recorded tail
+        final = None
+        if checks["video_bytes"]["state"] != PASS:
+            checks["final_reread"] = {"state": FAIL_CHECK, "detail": "video bytes not verified"}
+        elif self.core_factory is None or M.ffmpeg_bin() is None:
+            checks["final_reread"] = {"state": FAIL_CHECK, "detail": "referee final reader unavailable (fail-closed)"}
+        else:
+            last_file = b.segments[-1]["file"]
+            end_mono = int(b.segments[-1]["mono_ms"])
+            tail = [int(m["seq"]) for m in b.segments
+                    if m["file"] == last_file and int(m["mono_ms"]) >= end_mono - self.tail_ms and int(m.get("offset", 0)) > 0]
+
+            def frames():
+                for run in M.runs(tail, b):
+                    for t, img in M.decode_run(b, run, rd, hz=TAIL_HZ):
+                        yield t + wmm, img
+            corr = M.sidecar_corroboration(str(sub.dir / "meta"), self.sidecar_dir)
+            try:
+                final = M.reread_final(frames(), self.core_factory, corroboration=corr)
+                checks["final_reread"] = _final_check(final, b.receipt.get("result") or {})
+            except Exception as e:  # undecodable video is a failed check, never a crash or a silent pass
+                final = None
+                checks["final_reread"] = {"state": FAIL_CHECK, "detail": f"decode/read error: {type(e).__name__}: {e}"}
+        # ---- challenges (official nonce tokens, raw HID re-run, pause seen on the referee's decode)
+        ch_out, ch_check = self._challenges(sub, rd, wmm)
+        checks["challenges"] = ch_check
+        # ---- motion (referee-computed over every segment it decoded)
+        try:
+            mp, mdetail = self._motion(sub, rd)
+        except Exception as e:
+            mp, mdetail = None, {"note": f"motion not computed: {type(e).__name__}: {e}"}
+        checks["motion"] = {"state": PASS if mp is not None and mp >= R.MOTION_MIN_PERMILLE else PARTIAL_CHECK,
+                            "detail": mdetail}
+        # ---- input proof integrity
+        isum, ierrs = B.check_input_files(b)
+        if not isum.get("present"):
+            checks["input_integrity"] = {"state": PARTIAL_CHECK, "detail": "no controller log in this bundle"}
+        else:
+            checks["input_integrity"] = {"state": FAIL_CHECK if ierrs else PASS,
+                                         "detail": {**isum, "errors": ierrs,
+                                                    "note": "hashes/chains/counts recomputed; QorCap's human-likeness and "
+                                                            "alignment model is not re-run (advisory only)"}}
+        anchors = self._anchors(sub)
+        review = {"type": REVIEW_TYPE, "reviewed_ms": self.now(), "submission": sub.id, "commit": sub.commit,
+                  "capture_referee": {k2: (b.receipt.get("referee") or {}).get(k2) for k2 in ("pubkey", "key_id", "key_kind")},
+                  "bundle": {"schema": b.meta.get("schema"), "qorcap_version": b.meta.get("qorcap_version"),
+                             "chain_head": b.chain_head, "checkpoint_head": b.checkpoints[-1]["hash"],
+                             "inputs_chain_head": b.input_head, "segments": len(b.segments), "bytes": total_bytes,
+                             "local_receipt_sha256": sha256_hex({k2: v for k2, v in b.receipt.items() if k2 != "signatures"})},
+                  "checks": checks, "anchors": anchors,
+                  "final_reread": _final_summary(final),
+                  "scope": ("post-hoc review of an uploaded QorCap bundle by the QorTime official referee: "
+                            + ("every video byte hashed against the committed manifest" if sub.mode == FULL else
+                               f"spot-check of {len(sub.received)}/{len(b.segments)} segments (init, recorded tail, "
+                               f"challenge windows, {k} random segments drawn after commit)")),
+                  "not_proven": NOT_PROVEN}
+        sub.review = review
+        if any(c["state"] == FAIL_CHECK for c in checks.values()):
+            sub.state = "refused"
+            return sub.public()
+        rec = self._build(sub, final, ch_out, mp, mdetail, review)
+        v = R.verify_receipt(rec, referee_pub=self.key.pubkey_hex)
+        blocking = [e for e in v["errors"] if not e.startswith("missing_player_signature")]
+        if blocking:
+            sub.review["post_sign_errors"] = blocking
+            sub.state = "refused"
+            return sub.public()
+        sub.receipt = rec
+        sub.state = "awaiting_player_signature"
+        out = sub.public()
+        out["receipt"] = rec
+        out["signing_bytes_sha256"] = hashlib.sha256(R.signing_bytes(rec)).hexdigest()
+        return out
+
+    def _challenges(self, sub: Submission, rd, wmm: int) -> tuple[list[dict], dict[str, Any]]:
+        b = sub.bundle
+        toks = {t.get("nonce"): t for t in b.jsonl("official_challenges.jsonl")}
+        presses = B.press_events(b)
+        out, notes, bad = [], [], False
+        for c in b.receipt.get("challenges") or []:
+            c2 = {k: c.get(k) for k in ("id", "role", "phase", "nonce", "pattern", "issued_ms", "deadline_ms")}
+            tok = toks.get(c.get("nonce"))
+            official = (verify_token(tok, self.key.pubkey_hex, CHALLENGE_TOKEN_TYPE)
+                        and tok["issued_ms"] == c.get("issued_ms") and tok["deadline_ms"] == c.get("deadline_ms")
+                        and tok.get("phase") == c.get("phase"))
+            if official:
+                c2["issuer"] = {k: tok[k] for k in tok}
+                a = tok.get("anchor") or {}
+                if a.get("chain_head"):
+                    seq = b.heads.get(a["chain_head"])
+                    if seq is None or seq < 0 or int(b.segments[seq]["wall_ms"]) > tok["issued_ms"] + ANCHOR_SLACK_MS:
+                        notes.append(f"{c.get('phase')}: challenge anchor chain head not in manifest before issue time")
+                        bad = True
+            else:
+                notes.append(f"{c.get('phase')}: nonce was not issued by the official referee")
+            try:
+                issued, deadline = int(c["issued_ms"]), int(c["deadline_ms"])
+            except (KeyError, TypeError, ValueError):
+                out.append(dict(c2, result=None))
+                continue
+            win = [p for p in presses if issued <= p["t_ms"] <= deadline]
+            seqs = _challenge_seqs(b, c, presses, wmm)
+            pause_seen = None
+            if M.ffmpeg_bin() and all(s in sub.received for s in seqs if int(b.segments[s].get("offset", 0)) > 0):
+                def frames():
+                    for run in M.runs(seqs, b):
+                        for t, img in M.decode_run(b, run, rd, hz=30.0, size=(640, 360)):
+                            yield t + wmm, img
+                try:
+                    onsets = M.pause_onsets(frames())
+                except Exception as e:  # never silent
+                    onsets = []
+                    notes.append(f"{c.get('phase')}: pause detector error {type(e).__name__}")
+                pp = next((p["t_ms"] for p in sorted(win, key=lambda p: p["t_ms"]) if p["button"] == "OPTIONS"), None)
+                if pp is not None:
+                    pause_seen = next((o for o in onsets if pp - 300 <= o <= pp + 5_000), None)
+            res = verify_response(c2["pattern"] or [], [{"t_ms": p["t_ms"], "button": p["button"], "down": True} for p in win],
+                                  issued_ms=issued, deadline_ms=deadline, pause_seen_ms=pause_seen).to_dict()
+            res["hid_sha256"] = sha256_hex(win)
+            res["reverified_by"] = "official-referee"
+            out.append(dict(c2, result=res))
+            if not res["ok"]:
+                notes.append(f"{c.get('phase')}: {res['reason']}")
+        phases = {c.get("phase") for c in out if c.get("issuer") and (c.get("result") or {}).get("ok")}
+        if bad:
+            state = FAIL_CHECK
+        elif all(p in phases for p in PHASES):
+            state = PASS
+        else:
+            state = PARTIAL_CHECK
+            missing = [p for p in PHASES if p not in phases]
+            notes.append(f"official challenges passed for {sorted(phases) or 'none'}; missing/failed: {missing}")
+        return out, {"state": state, "detail": {"count": len(out), "notes": notes}}
+
+    def _motion(self, sub: Submission, rd) -> tuple[int | None, dict[str, Any]]:
+        b = sub.bundle
+        if not M.ffmpeg_bin() or not b.inputs:
+            return None, {"note": "not computed (no ffmpeg or no controller log)"}
+        energy = M.input_energy_series(b)
+        xs, ys = [], []
+        media = [s for s in sub.decode if s in sub.received]
+        for run in M.runs(media, b):
+            mot = M.motion_series(M.decode_run(b, run, rd, hz=MOTION_HZ, size=(96, 54), gray=True))
+            for k2 in sorted(mot):
+                xs.append(energy.get(k2, 0))
+                ys.append(mot[k2])
+        if len(xs) < 20:
+            return None, {"bins": len(xs), "note": "too few decoded seconds for a motion correlation"}
+        mp = motion_correlation_permille(xs, ys)
+        return mp, {"bins": len(xs), "motion_permille": mp,
+                    "basis": "referee-computed: controller report rate vs frame-difference energy per second over the "
+                             "segments the referee decoded"}
+
+    def _anchors(self, sub: Submission) -> dict[str, Any]:
+        b = sub.bundle
+        ok, bad = [], 0
+        for a in b.jsonl("anchors.jsonl"):
+            seq = b.heads.get(a.get("chain_head")) if isinstance(a, dict) else None
+            if (verify_token(a, self.key.pubkey_hex, ANCHOR_TYPE) and seq is not None and seq >= 0
+                    and int(b.segments[seq]["wall_ms"]) <= int(a["referee_ts_ms"]) + ANCHOR_SLACK_MS):
+                ok.append({"segment_seq": seq, "referee_ts_ms": a["referee_ts_ms"]})
+            else:
+                bad += 1
+        return {"valid": len(ok), "invalid": bad, "first": ok[0] if ok else None, "last": ok[-1] if ok else None,
+                "meaning": "each valid anchor proves the video chain up to that segment existed when the official "
+                           "referee stamped it"}
+
+    def _build(self, sub: Submission, final: dict | None, challenges: list[dict], mp: int | None, mdetail: dict,
+               review: dict) -> dict[str, Any]:
+        b = sub.bundle
+        lr = b.receipt
+        role = b.role
+        res = _result_from_reread(final, lr.get("result") or {})
+        signals = {"motion_permille": {role: mp}, "motion_basis": mdetail.get("basis", mdetail.get("note"))}
+        if (lr.get("signals") or {}).get("input"):
+            signals["input"] = lr["signals"]["input"]
+        rec = R.build(match=dict(lr["match"]), result=res, players=copy.deepcopy(lr["players"]),
+                      referee={"pubkey": self.key.pubkey_hex, "key_id": self.key.key_id, "key_kind": REVIEW_KEY_KIND},
+                      challenges=challenges, checkpoints={role: copy.deepcopy(lr["checkpoints"][role])},
+                      agreement=lr.get("agreement") or {"timelines_agree": None, "mismatches": []}, signals=signals)
+        rec["review"] = review
+        return R.sign_referee(rec, self.key)
+
+    def add_player_signature(self, sub: Submission, sig: str) -> dict[str, Any]:
+        if sub.state != "awaiting_player_signature" or sub.receipt is None:
+            raise ValueError(f"submission is {sub.state}")
+        p = sub.receipt["players"][0]
+        if not verify(p["pubkey"], sig, R.signing_bytes(sub.receipt)):
+            raise PermissionError("bad player signature")
+        sub.receipt["signatures"]["players"][p["role"]] = {"key_id": kid(p["pubkey"]), "sig": sig}
+        sub.verify = R.verify_receipt(sub.receipt, referee_pub=self.key.pubkey_hex)
+        sub.state = "complete"
+        self.cleanup_segments(sub)
+        return {"receipt": sub.receipt, "verify": sub.verify}
+
+    def cleanup_segments(self, sub: Submission) -> None:
+        shutil.rmtree(sub.dir / "segs", ignore_errors=True)
+
+    def expire(self, max_age_ms: int = 3_600_000) -> int:
+        n = 0
+        for sid, sub in list(self.subs.items()):
+            if self.now() - sub.created_ms > max_age_ms:
+                shutil.rmtree(sub.dir, ignore_errors=True)
+                del self.subs[sid]
+                n += 1
+        return n
+
+
+def _challenge_seqs(b: B.Bundle, c: dict[str, Any], presses: list[dict[str, Any]], wmm: int) -> list[int]:
+    """Segments the referee needs to see the pause menu for one challenge: around the first OPTIONS press inside the
+    challenge window (from the committed controller log), or the whole window when there is no press."""
+    try:
+        issued, deadline = int(c["issued_ms"]), int(c["deadline_ms"])
+    except (KeyError, TypeError, ValueError):
+        return []
+    pp = next((p["t_ms"] for p in presses if p["button"] == "OPTIONS" and issued <= p["t_ms"] <= deadline), None)
+    lo, hi = (pp - 1_000, pp + 5_000) if pp is not None else (issued, deadline)
+    lo, hi = lo - wmm, hi - wmm
+    # a segment covers (prev mono_ms, mono_ms]; include every segment overlapping [lo, hi]
+    rng = B.segment_ranges(b)
+    return [s for s, (a, z) in rng.items() if z >= lo and a <= hi]
+
+
+def _clean_anchor(a: dict | None) -> dict | None:
+    if not isinstance(a, dict) or not isinstance(a.get("chain_head"), str) or len(a["chain_head"]) != 64:
+        return None
+    out = {"chain_head": a["chain_head"].lower()}
+    for k in ("segment_seq", "checkpoint_seq"):
+        if isinstance(a.get(k), int) and not isinstance(a.get(k), bool):
+            out[k] = a[k]
+    if isinstance(a.get("checkpoint_head"), str) and len(a["checkpoint_head"]) == 64:
+        out["checkpoint_head"] = a["checkpoint_head"].lower()
+    return out
+
+
+def _final_summary(final: dict | None) -> dict[str, Any] | None:
+    if final is None:
+        return None
+    f = final.get("final") or {}
+    lr = final.get("last_read") or {}
+    return {"basis": f.get("basis"), "home": f.get("home", lr.get("home")), "away": f.get("away", lr.get("away")),
+            "quarter": f.get("quarter", lr.get("quarter")), "final_confirmed": f.get("final_confirmed"),
+            "notes": f.get("notes"), "scorebug_reads": final.get("reads"), "stats": final.get("stats"),
+            "end_menu_rejected": (final.get("end_menu_rejected") or {}).get("why")}
+
+
+def _final_check(final: dict, claimed: dict) -> dict[str, Any]:
+    f = final.get("final")
+    lr = final.get("last_read")
+    src = f or lr
+    if src is None:
+        return {"state": FAIL_CHECK, "detail": "referee could not read any score from the recorded tail"}
+    mine = (src["home"], src["away"])
+    theirs = (claimed.get("home_score"), claimed.get("away_score"))
+    if mine != theirs:
+        return {"state": FAIL_CHECK, "detail": f"referee read HOME {mine[0]} - AWAY {mine[1]} but the laptop claimed "
+                                               f"HOME {theirs[0]} - AWAY {theirs[1]}"}
+    if f and f.get("basis") == "end_menu" and f.get("final_confirmed") is not False:
+        return {"state": PASS, "detail": "end-of-game menu re-read by the referee matches the claimed final"}
+    if f and f.get("basis") == "end_menu":
+        return {"state": PARTIAL_CHECK, "detail": "end-of-game menu read but one-legal-step delta not corroborated"}
+    if f:
+        return {"state": PARTIAL_CHECK, "detail": f"scorebug final ({f.get('basis')}) only; end-of-game menu not read"}
+    return {"state": PARTIAL_CHECK, "detail": "last scorebug read only; no final detected in the recorded tail"}
+
+
+def _result_from_reread(final: dict | None, claimed: dict) -> dict[str, Any]:
+    f = (final or {}).get("final")
+    lr = (final or {}).get("last_read")
+    src = f or lr
+    res = {"home_score": src["home"], "away_score": src["away"], "quarter": max(4, int(src.get("quarter") or 4)) if f else
+           int(src.get("quarter") or claimed.get("quarter") or 0), "final_t_ms": int(src["t_ms"]),
+           "winner": "home" if src["home"] > src["away"] else "away"}
+    if f and f.get("basis") == "end_menu":
+        res.update(method="end_menu_read", final_basis="end_menu", final_confirmed=f.get("final_confirmed") is not False)
+    elif f:
+        res.update(method="agreed_scorebug_final", final_basis=f.get("basis"), final_confirmed=False)
+    else:
+        res.update(method="last_scorebug_read_unconfirmed", final_confirmed=False)
+    if f and f.get("notes"):
+        res["notes"] = list(f["notes"])
+    return res

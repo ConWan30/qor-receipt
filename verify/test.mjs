@@ -36,5 +36,15 @@ const advOk = inputProofAdvisory({ input: { human_permille: 700, match_permille:
 ok(advOk && advOk.ok, "inputProofAdvisory accepts strong human/align/haptic signals");
 const advBad = inputProofAdvisory({ input: { human_permille: 50, match_permille: 10, chance_permille: 200, haptic_events: 0 } });
 ok(advBad && !advBad.ok && advBad.flags.includes("human_score_low"), "inputProofAdvisory flags weak signals (advisory only)");
+// Official post-hoc review receipt (Python-produced, signed by a TEST key that only the vector's allowlist trusts).
+const rv = JSON.parse(readFileSync(new URL("../tests/vectors/review_receipt.json", import.meta.url)));
+r = await verifyReceipt(rv.receipt, rv.referee_pub, { allowlist: rv.allowlist });
+ok(r.status === "VERIFIED" && r.verification_basis === "official-post-hoc-review", "review receipt + allowlisted key => VERIFIED in JS");
+ok((await verifyReceipt(rv.receipt, rv.referee_pub)).status === "SELF_ATTESTED", "review receipt by a key not on the built-in allowlist => SELF_ATTESTED");
+const rt = structuredClone(rv.receipt); rt.review.checks.video_bytes.detail.method = "full";
+ok((await verifyReceipt(rt, rv.referee_pub, { allowlist: rv.allowlist })).status === "FAIL", "tampered review block => FAIL");
+const rt2 = structuredClone(rv.receipt); rt2.challenges[0].issuer.issued_ms -= 1;
+r = await verifyReceipt(rt2, rv.referee_pub, { allowlist: rv.allowlist });
+ok(r.status === "FAIL", "tampered challenge token (covered by referee signature) => FAIL");
 process.exit(fails ? 1 : 0);
 

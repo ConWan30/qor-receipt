@@ -70,6 +70,7 @@
           "nonce": {"type": "string", "pattern": "^[0-9a-f]{32}$"},
           "pattern": {"type": "array", "minItems": 2, "items": {"type": "string"}},
           "issued_ms": {"$ref": "#/$defs/ms"}, "deadline_ms": {"$ref": "#/$defs/ms"},
+          "issuer": {"type": "object", "description": "Signed qortime-challenge/v1 token from the official referee (review receipts)."},
           "result": {"oneOf": [{"type": "null"}, {"type": "object", "required": ["ok", "reason"],
                      "properties": {"ok": {"type": "boolean"}, "reason": {"type": "string"},
                                     "pause_press_ms": {"type": ["integer", "null"]}, "done_ms": {"type": ["integer", "null"]},
@@ -85,6 +86,10 @@
     "signals": {"type": "object", "properties": {"motion_permille": {"type": "object",
                 "additionalProperties": {"type": ["integer", "null"], "minimum": -1000, "maximum": 1000}}}},
     "trust_tier": {"enum": ["dual-attested", "single-attested"]},
+    "review": {"type": "object", "description": "Official post-hoc bundle review (qortime-bundle-review/v1); only with referee.key_kind qortime-official-review; covered by the referee signature.",
+      "required": ["type", "capture_referee", "checks"],
+      "properties": {"type": {"const": "qortime-bundle-review/v1"}, "capture_referee": {"type": "object"},
+        "checks": {"type": "object", "additionalProperties": {"type": "object", "required": ["state"], "properties": {"state": {"enum": ["pass", "partial", "fail"]}}}}}},
     "signatures": {"type": "object", "additionalProperties": false, "required": ["players", "referee"],
                    "properties": {"players": {"type": "object", "additionalProperties": {"$ref": "#/$defs/sig"}},
                                   "referee": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/sig"}]}}}

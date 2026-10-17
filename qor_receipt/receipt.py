@@ -17,6 +17,7 @@ from qor_receipt.challenge import DEFAULT_LEN, PHASES, pattern_for
 from qor_receipt.checkpoints import verify_chain
 from qor_receipt.jcs import canonicalize
 from qor_receipt.keys import KeyProvider, kid, verify  # noqa: F401
+from qor_receipt.review.policy import CHALLENGE_TOKEN_TYPE, CHECK_STATES, FAIL_CHECK, PARTIAL_CHECK, REVIEW_KEY_KIND, REVIEW_TYPE
 from qor_receipt.trusted_referees import is_trusted_active, lookup
 
 VERIFIED, PARTIAL, SELF_ATTESTED, FAIL = "VERIFIED", "PARTIAL", "SELF_ATTESTED", "FAIL"
@@ -98,6 +99,60 @@ def _challenge_evidence_errors(c: dict[str, Any], cps: list[dict[str, Any]]) -> 
     return errs
 
 
+def _is_hex64(v: Any) -> bool:
+    return isinstance(v, str) and len(v) == 64 and all(ch in "0123456789abcdef" for ch in v.lower())
+
+
+def official_challenge_ok(c: dict[str, Any], *, allowlist_path: str | None = None) -> bool:
+    """Review receipts: the challenge nonce must come from a token signed by an allowlisted active referee key,
+    issued for exactly this nonce / phase / window (so the pattern could not be known before issued_ms)."""
+    tok = c.get("issuer")
+    if not isinstance(tok, dict) or tok.get("type") != CHALLENGE_TOKEN_TYPE or not isinstance(tok.get("sig"), str):
+        return False
+    for k in ("nonce", "phase", "issued_ms", "deadline_ms"):
+        if tok.get(k) != c.get(k):
+            return False
+    from qor_receipt.trusted_referees import load_allowlist
+
+    payload = canonicalize({k: v for k, v in tok.items() if k != "sig"})
+    for row in load_allowlist(allowlist_path).get("referees") or []:
+        pub = str(row.get("pubkey", "")).lower()
+        if row.get("status") == "active" and tok.get("key_id") == kid(pub) and verify(pub, tok["sig"], payload):
+            return True
+    return False
+
+
+def _review_problems(r: dict[str, Any], ref: dict[str, Any]) -> tuple[str | None, list[str], list[str]]:
+    """Validate the ``review`` block of an official post-hoc review receipt. Returns (capture_pubkey, errors, partial)."""
+    rv = r.get("review")
+    if not isinstance(rv, dict) or rv.get("type") != REVIEW_TYPE:
+        return None, ["review_missing_or_wrong_type"], []
+    cap = (rv.get("capture_referee") or {}).get("pubkey")
+    errs: list[str] = []
+    part: list[str] = []
+    if not _is_hex64(cap):
+        errs.append("review_capture_referee_missing")
+        cap = None
+    elif cap.lower() == str(ref.get("pubkey", "")).lower():
+        errs.append("review_capture_referee_is_official_key")
+    checks = rv.get("checks")
+    if not isinstance(checks, dict) or not checks:
+        errs.append("review_checks_missing")
+        checks = {}
+    for name in ("video_bytes", "final_reread", "capture_chain", "bundle_structure"):
+        if name not in checks:
+            errs.append(f"review_check_missing:{name}")
+    for name, c in sorted(checks.items()):
+        st = c.get("state") if isinstance(c, dict) else None
+        if st not in CHECK_STATES:
+            errs.append(f"review_check_bad_state:{name}")
+        elif st == FAIL_CHECK:
+            errs.append(f"review_check_failed:{name}")
+        elif st == PARTIAL_CHECK:
+            part.append(f"review_partial:{name}")
+    return cap, errs, part
+
+
 # Advisory thresholds for signals.input (QorCap input_proof) — never gates VERIFIED alone.
 INPUT_HUMAN_MIN = 400          # human_permille: below = "machine-like / low"
 INPUT_ALIGN_EDGE = 50          # match_permille must beat chance_permille by this margin
@@ -174,6 +229,7 @@ def verify_receipt(r: dict[str, Any], *, referee_pub: str | None = None,
     trusted_ref = False
     input_advisory = _input_proof_advisory(r.get("signals") if isinstance(r, dict) else None)
     referee_entry: dict[str, Any] | None = None
+    review_mode = False
     try:
         if r.get("schema") != SCHEMA:
             return {"status": FAIL, "trust_tier": None, "errors": ["schema"], "partial": [],
@@ -219,6 +275,17 @@ def verify_receipt(r: dict[str, Any], *, referee_pub: str | None = None,
             if kind in UNVERIFIED_KIND_CLAIMS:
                 partial.append(f"{role}:key_kind_claim_unverified:{kind}")
 
+        # Official post-hoc review receipt: the official key signs the receipt; checkpoint countersignatures are the
+        # capture (laptop) referee's and are checked under review.capture_referee. Every review check must pass.
+        chain_pub = ref["pubkey"]
+        review_mode = ref.get("key_kind") == REVIEW_KEY_KIND
+        if review_mode:
+            cap, rerrs, rpart = _review_problems(r, ref)
+            errors += rerrs
+            partial += rpart
+            if cap:
+                chain_pub = cap
+
         m = r["match"]
         if m.get("mode") == "dual" and roles_seen != {"home", "away"}:
             errors.append("dual_missing_roles")
@@ -247,7 +314,7 @@ def verify_receipt(r: dict[str, Any], *, referee_pub: str | None = None,
             if role not in ROLES:
                 continue
             errors += [f"{role}:{e}" for e in verify_chain(
-                r["checkpoints"].get(role, []), match_id=m["match_id"], role=role, referee_pub=ref["pubkey"],
+                r["checkpoints"].get(role, []), match_id=m["match_id"], role=role, referee_pub=chain_pub,
                 start_ms=m["started_ms"], end_ms=m["ended_ms"])]
             for ph in PHASES:
                 cs = [c for c in r["challenges"] if c["role"] == role and c["phase"] == ph]
@@ -267,6 +334,8 @@ def verify_receipt(r: dict[str, Any], *, referee_pub: str | None = None,
                     else:
                         # Do not trust bare result.ok: require committed evidence + live referee window.
                         ev_errs = _challenge_evidence_errors(c, r["checkpoints"].get(role, []))
+                        if review_mode and not official_challenge_ok(c, allowlist_path=allowlist_path):
+                            ev_errs.append("challenge_nonce_not_official")
                         if ev_errs:
                             for e in ev_errs:
                                 partial.append(f"{role}:{ph}:{e}")
@@ -311,4 +380,12 @@ def verify_receipt(r: dict[str, Any], *, referee_pub: str | None = None,
            "input_advisory": input_advisory}
     if referee_entry:
         out["referee_id"] = referee_entry.get("id")
+    if review_mode and isinstance(r.get("review"), dict):
+        rv = r["review"]
+        vb = ((rv.get("checks") or {}).get("video_bytes") or {}).get("detail") or {}
+        out["verification_basis"] = "official-post-hoc-review"
+        out["review"] = {"scope": rv.get("scope"), "video_method": vb.get("method") if isinstance(vb, dict) else None,
+                         "segments_verified": vb.get("segments_verified") if isinstance(vb, dict) else None,
+                         "segments_total": vb.get("segments_total") if isinstance(vb, dict) else None,
+                         "not_proven": rv.get("not_proven")}
     return out
