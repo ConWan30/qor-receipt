@@ -119,3 +119,23 @@ def test_viewer_template_renders_self_contained(tmp_path):
     assert '"src": null' in html  # missing frame file stays missing, never fabricated
     for ext in ("http://", "https://", "<link", "@import", "src=\"//"):
         assert ext not in html.replace("http://www.w3.org/2000/svg", "")
+
+
+def test_viewer_mobile_contract(tmp_path):
+    """Mobile QA (2026-10-17): touch hit areas, page scroll through the timeline, no unused embeds."""
+    from qor_receipt.match_index.viewer import TEMPLATE, write_viewer
+    (tmp_path / "events" / "x").mkdir(parents=True)
+    (tmp_path / "events" / "x" / "frame_00.jpg").write_bytes(b"\xff\xd8frame")
+    (tmp_path / "events" / "x" / "contact.jpg").write_bytes(b"\xff\xd8contact-sheet-bytes")
+    idx = {"match_id": "m", "events": [{"kind": "score_change", "t_ms": W0, "score_after": {"away": 0, "home": 7},
+                                        "contact_sheet": "events/x/contact.jpg",
+                                        "frames": [{"file": "events/x/frame_00.jpg", "dt_s": 0.0}]}],
+           "result": {}, "chain": {}, "input_summary": {}, "video": {}, "missing": []}
+    html = write_viewer(idx, tmp_path).read_text()
+    import base64
+    assert base64.b64encode(b"\xff\xd8frame").decode() in html
+    assert base64.b64encode(b"\xff\xd8contact-sheet-bytes").decode() not in html  # unused by the viewer
+    assert "touch-action:pan-y" in TEMPLATE and "touch-action:none" not in TEMPLATE  # vertical swipes still scroll
+    assert "pointercancel" in TEMPLATE and 'id="prv"' in TEMPLATE and 'id="nxt"' in TEMPLATE
+    assert "width:44px;height:44px" in TEMPLATE  # markers / step buttons meet the 44px touch target
+    assert "prefers-reduced-motion" in TEMPLATE and "(pointer:coarse)" in TEMPLATE

@@ -21,7 +21,8 @@ def write_viewer(idx: dict, out: Path) -> Path:
     for e in data["events"]:
         for f in e.get("frames") or []:
             f["src"] = _embed(out, f["file"])
-        e["contact_src"] = _embed(out, e.get("contact_sheet"))
+        # contact sheets stay on disk next to viewer.html; the viewer never shows them, so embedding them
+        # only made the single file ~25% bigger (slower to parse on phones)
     blob = json.dumps(data).replace("</", "<\\/")
     title = html.escape(f"QorTime · what the AI saw · {idx.get('match_id') or 'match'}")
     p = out / "viewer.html"
