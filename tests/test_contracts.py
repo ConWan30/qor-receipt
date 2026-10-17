@@ -115,3 +115,27 @@ def test_js_verifier_same_verdicts_on_golden_fixtures():
         pytest.skip("node not installed")
     p = subprocess.run([node, str(ROOT / "verify" / "contract.test.mjs")], capture_output=True, text=True, timeout=120)
     assert p.returncode == 0, p.stdout + p.stderr
+
+
+def test_referee_image_pins_sidecar_with_every_scorebug_profile():
+    """The referee image's pinned QorCap sidecar must carry every registry scorebug profile (Monday Night included)."""
+    img = COMPAT["referee_image"]
+    df = (ROOT / "services" / "referee" / "Dockerfile").read_text()
+    m = re.search(r"ARG QORCAP_SHA=([0-9a-f]{40})", df)
+    assert m and m[1] == img["qorcap_sidecar_sha"]
+    assert set(img["scorebug_profiles"]) == set(COMPAT["scorebug_profiles"])
+    assert "madden27_monday_night_v1.npz" in df
+
+
+def test_hardening_contracts_match_code():
+    from qor_receipt import delegation as D
+    from qor_receipt import translog as T
+    from qor_receipt.referee_service import submit_auth as A
+
+    assert COMPAT["referee_delegation"]["type"] == D.DELEGATION_TYPE
+    assert COMPAT["referee_delegation"]["revocations_type"] == D.REVOCATIONS_TYPE
+    assert COMPAT["referee_delegation"]["max_lifetime_days"] * 86_400_000 == D.MAX_LIFETIME_MS
+    assert COMPAT["transparency_log"]["entry_type"] == T.ENTRY_TYPE and COMPAT["transparency_log"]["head_type"] == T.HEAD_TYPE
+    sa = COMPAT["submit_auth"]
+    assert sa["request_type"] == A.SUBMIT_TYPE and sa["pow_prefix"] == A.POW_PREFIX and sa["header"].lower() == A.HEADER
+    assert sa["min_client"] in A.UPGRADE_MSG
