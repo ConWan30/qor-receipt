@@ -1,0 +1,608 @@
+{
+ "receipt": {
+  "schema": "qor-receipt/v0",
+  "match": {
+   "match_id": "local-test-review",
+   "game": "madden27",
+   "platform": "ps5",
+   "scorebug_profile": "madden27_standard",
+   "mode": "single",
+   "started_ms": 1792000000000,
+   "ended_ms": 1792000040030
+  },
+  "result": {
+   "home_score": 14,
+   "away_score": 7,
+   "quarter": 4,
+   "final_t_ms": 1792000001500,
+   "winner": "home",
+   "method": "end_menu_read",
+   "final_basis": "end_menu",
+   "final_confirmed": true
+  },
+  "players": [
+   {
+    "role": "home",
+    "player_id": "local:player",
+    "pubkey": "36f6b2b7c2a969caa69dbd5dd382db68ee24feb00ac2295ec645e76238ef5f55",
+    "key_kind": "software-file"
+   }
+  ],
+  "referee": {
+   "pubkey": "9321a61cde668a9890f307bdd9c09290e02df14754a56333654042104847481a",
+   "key_id": "b0c55b07160ad0b3",
+   "key_kind": "qortime-official-review",
+   "delegation": {
+    "type": "qortime-referee-delegation/v1",
+    "serial": 1,
+    "root_id": "test-root",
+    "root_key_id": "718e81f0918594e0",
+    "delegate_id": "test-online-s1",
+    "delegate_pubkey": "9321a61cde668a9890f307bdd9c09290e02df14754a56333654042104847481a",
+    "delegate_key_id": "b0c55b07160ad0b3",
+    "scope": [
+     "official-review"
+    ],
+    "allowed_statuses": [
+     "VERIFIED",
+     "PARTIAL"
+    ],
+    "not_before_ms": 1791913600000,
+    "not_after_ms": 1794592000000,
+    "issued_ms": 1791913600000,
+    "sig": "7a9c312994d87b81b28ca539297b5add14a433461c83e638431dc126979cbb788d0305d1ef84d4633a40743905556a68f856917bc048416566f4d9b378e60d06"
+   }
+  },
+  "challenges": [
+   {
+    "id": "6fdd5570",
+    "role": "home",
+    "phase": "kickoff",
+    "nonce": "6fdd55707c137359ecefd00ec78ff4a1",
+    "pattern": [
+     "OPTIONS",
+     "LEFT",
+     "SQUARE",
+     "CIRCLE",
+     "CROSS"
+    ],
+    "issued_ms": 1792000003000,
+    "deadline_ms": 1792000023000,
+    "issuer": {
+     "type": "qortime-challenge/v1",
+     "nonce": "6fdd55707c137359ecefd00ec78ff4a1",
+     "pattern": [
+      "OPTIONS",
+      "LEFT",
+      "SQUARE",
+      "CIRCLE",
+      "CROSS"
+     ],
+     "phase": "kickoff",
+     "role": "home",
+     "match_id": "local-test-review",
+     "issued_ms": 1792000003000,
+     "deadline_ms": 1792000023000,
+     "anchor": null,
+     "key_id": "b0c55b07160ad0b3",
+     "sig": "036729c17a45449245fbb3705038148102c27d50516ebea9024437474c40da540500c92b8190d279d9cee9fe1fd536f07d7d26704649df13240432c84a24f30c"
+    },
+    "result": {
+     "ok": true,
+     "reason": "ok",
+     "pause_press_ms": 1792000004800,
+     "done_ms": 1792000008700,
+     "latency_ms": 200,
+     "hid_sha256": "249c39752794cba54848cd55d310c510a2d1545a8b994567bc3965b0091702bd",
+     "reverified_by": "official-referee"
+    }
+   },
+   {
+    "id": "70e952ee",
+    "role": "home",
+    "phase": "halftime",
+    "nonce": "70e952eeb9176882615c093c6b448478",
+    "pattern": [
+     "OPTIONS",
+     "DOWN",
+     "CROSS",
+     "CIRCLE",
+     "CROSS"
+    ],
+    "issued_ms": 1792000015000,
+    "deadline_ms": 1792000035000,
+    "issuer": {
+     "type": "qortime-challenge/v1",
+     "nonce": "70e952eeb9176882615c093c6b448478",
+     "pattern": [
+      "OPTIONS",
+      "DOWN",
+      "CROSS",
+      "CIRCLE",
+      "CROSS"
+     ],
+     "phase": "halftime",
+     "role": "home",
+     "match_id": "local-test-review",
+     "issued_ms": 1792000015000,
+     "deadline_ms": 1792000035000,
+     "anchor": null,
+     "key_id": "b0c55b07160ad0b3",
+     "sig": "6037813f504f1a70c866d4a58bd0ecd108df421b9a9f2f01f8c0dbeff5896cabeba8af1018427fced60003c10d4ef102a08e12bbe5d3fead07a5e875424e0704"
+    },
+    "result": {
+     "ok": true,
+     "reason": "ok",
+     "pause_press_ms": 1792000016800,
+     "done_ms": 1792000020700,
+     "latency_ms": 200,
+     "hid_sha256": "a19aaaf89450c150a52255099ee74fa8ad329fa51ddf6ab74c2434f9de5eb3b0",
+     "reverified_by": "official-referee"
+    }
+   },
+   {
+    "id": "0b8fd4eb",
+    "role": "home",
+    "phase": "end",
+    "nonce": "0b8fd4eb14727c75535b481859c2dd01",
+    "pattern": [
+     "OPTIONS",
+     "RIGHT",
+     "CROSS",
+     "SQUARE",
+     "LEFT"
+    ],
+    "issued_ms": 1792000027000,
+    "deadline_ms": 1792000047000,
+    "issuer": {
+     "type": "qortime-challenge/v1",
+     "nonce": "0b8fd4eb14727c75535b481859c2dd01",
+     "pattern": [
+      "OPTIONS",
+      "RIGHT",
+      "CROSS",
+      "SQUARE",
+      "LEFT"
+     ],
+     "phase": "end",
+     "role": "home",
+     "match_id": "local-test-review",
+     "issued_ms": 1792000027000,
+     "deadline_ms": 1792000047000,
+     "anchor": null,
+     "key_id": "b0c55b07160ad0b3",
+     "sig": "65fd9f01085fb766887720553e341c60f65f4b86282944abc28aff05237df144de9198b21e40d1077ed2b095ea9e218ae5df57a4863d50fef25e34203090d401"
+    },
+    "result": {
+     "ok": true,
+     "reason": "ok",
+     "pause_press_ms": 1792000028800,
+     "done_ms": 1792000032700,
+     "latency_ms": 200,
+     "hid_sha256": "631358e20a265c22d92bbe53d21362ec72ee04e60cf4c670d831e6384ff8648b",
+     "reverified_by": "official-referee"
+    }
+   }
+  ],
+  "checkpoints": {
+   "home": [
+    {
+     "seq": 0,
+     "t_ms": 1792000000000,
+     "frames_hash": "50ab9700814ed261ecc924aacf95f844c21ee6dc98a9b0c6413b9665eee2d725",
+     "input_hash": "8b927623b38e5fb7345e6839ceb033daace446e69e051718bdafcf7c47acab33",
+     "prev": "0000000000000000000000000000000000000000000000000000000000000000",
+     "hash": "7ea15a30d3d0f71f63e15ff8cc8fd03fea191656bc79b6138f225ce7b09c624e",
+     "referee_ts_ms": 1792000000030,
+     "referee_sig": "7172bfe3d6e6cb3951fbe60565d2782a158b74c772eb7f903186611c55e4ea5d47eec5718ffca58d9d8947a0a2ae3d7895388d59be66f672b095acfe2297a904"
+    },
+    {
+     "seq": 1,
+     "t_ms": 1792000002000,
+     "frames_hash": "b4db95c7cb1137dd5159971dfad0f86e1e7078d61bec64800533e0acefa77cf1",
+     "input_hash": "4c63a6e18959b4edc2d9cf244c33602ec2e5c58f1b69cb7f1db8ba1c1e48d18a",
+     "prev": "7ea15a30d3d0f71f63e15ff8cc8fd03fea191656bc79b6138f225ce7b09c624e",
+     "hash": "28697acf184ebf8d3d7e44675f1d4f82e323979c79cf48675e5680f2d43127a5",
+     "referee_ts_ms": 1792000002030,
+     "referee_sig": "d1c9104fcd4290991d4bf49561a9aecf85a88764ad01a0c3877215d8887f23bd18151b26dd8734b886ad6583a0ae84904b5e59c833169ff9b20e0d22ebd51b09"
+    },
+    {
+     "seq": 2,
+     "t_ms": 1792000004000,
+     "frames_hash": "133f7b853bebf496edc7bb678b46e7e670f4ca3cc9a6cfc68381091a2f98ab1c",
+     "input_hash": "aed15aa0c4a4490e7aa422e5f5631357ab6dd43f29bdeb5792a50b585b619df5",
+     "prev": "28697acf184ebf8d3d7e44675f1d4f82e323979c79cf48675e5680f2d43127a5",
+     "hash": "83415853c6878e65ad8e3b20d42dc623a3883a5cc2ba263d2cefbf7361c8d7ff",
+     "referee_ts_ms": 1792000004030,
+     "referee_sig": "e19a70606abb39f8f951fa12ce8a30ec8a9a73d3281f5ae665d9207a1a65d7e6a71e8b9690eed8c70be85f35cc2812340d0e94156adabb47aa91f355b5c6440a"
+    },
+    {
+     "seq": 3,
+     "t_ms": 1792000006000,
+     "frames_hash": "9d54d71714cfd25b1bdb5735f5352d808e59cf8d6d87139ebb37e8473c38f9f0",
+     "input_hash": "d5198625374adbdbd7f775b6b909eb23273dde11674a02251b3a0a42ecb3b6fa",
+     "prev": "83415853c6878e65ad8e3b20d42dc623a3883a5cc2ba263d2cefbf7361c8d7ff",
+     "hash": "913cedfff6c25878bd9c1e2e0a0a2274bcf490170678a1ba9776467d36da6463",
+     "referee_ts_ms": 1792000006030,
+     "referee_sig": "c2d8890ebb49bc785a663b3d8c4d72eef1c105eba8a39defb8bf9b45dcb24911821945365e70a1e7f0d57944ed1ab3085a7ca4aa2c1f39d03f6f4bddcf7e8c08"
+    },
+    {
+     "seq": 4,
+     "t_ms": 1792000008000,
+     "frames_hash": "e7d82e013df6e4e21828dbb23ab2063f5101e70f699457c3f760029ccd0795e1",
+     "input_hash": "0a794cda6a01a5c584821742a404e03fa196f9e7f60ca07260664b33c973da65",
+     "prev": "913cedfff6c25878bd9c1e2e0a0a2274bcf490170678a1ba9776467d36da6463",
+     "hash": "bfd59f1f5aa5e6d241d459c199e1024353a464b89b3d2cec0fba99029b992f52",
+     "referee_ts_ms": 1792000008030,
+     "referee_sig": "8cf6ee4d332f292a2103b085b000fc4e039236d2cde7d1ec3039ecc387f57709798bac93cc2f367874a8c47e574d3624a18ee4f1017d48718264d0fdbc87010a"
+    },
+    {
+     "seq": 5,
+     "t_ms": 1792000010000,
+     "frames_hash": "b7d487ef7ef42719f76a49dcae19b477cee8655ec96b1daddbfdb23394ff393b",
+     "input_hash": "4b0328e2fba72dee891fdff8bb3140185d70b20881ba576ba4938194512076e5",
+     "prev": "bfd59f1f5aa5e6d241d459c199e1024353a464b89b3d2cec0fba99029b992f52",
+     "hash": "c9497225b6f7c8c38c7d3df44f96c13a756dbc38dfd62749380f6ad93e100d26",
+     "referee_ts_ms": 1792000010030,
+     "referee_sig": "2b5a07062e2c0fe500338a1d9c2dee2259cf524a0e23d31fcd7e0d6683e5ed5be88e8268f2b08f9f1c86324e16ea3c523f0c835a25a01ff17b8ef51e7d774a0f"
+    },
+    {
+     "seq": 6,
+     "t_ms": 1792000012000,
+     "frames_hash": "3d9384574fb4dc4c6b4a0283033fca18b25f010b3f2aa1afc77b5f187c0aa92a",
+     "input_hash": "9b924456a902373d9b15c42348ce3ddc96b5a0acec64a0a6e27bbcb8f9290a99",
+     "prev": "c9497225b6f7c8c38c7d3df44f96c13a756dbc38dfd62749380f6ad93e100d26",
+     "hash": "0682f597d6f25423352d8bcdda39e1d83a4bdaecdced6cf53cac719f0e859a6e",
+     "referee_ts_ms": 1792000012030,
+     "referee_sig": "86e65dd75cbb386e87ebb5e18a5465bc57c04ac6265921582cdb079f0db56e37f4dd46b24e4f498928cc82407888bfc7110e92ff455ef206f309ba12a60b0904"
+    },
+    {
+     "seq": 7,
+     "t_ms": 1792000014000,
+     "frames_hash": "eee3984057608bab04f3ffce643443787aec9b7096861cb6f0cb9bf9b8c33fc8",
+     "input_hash": "9c151ac71c358c800b5b08df2d943dd89ce5704c9f3a542b9239b69eb6ebe1f2",
+     "prev": "0682f597d6f25423352d8bcdda39e1d83a4bdaecdced6cf53cac719f0e859a6e",
+     "hash": "38c0f3382f5ba850909ee245ec42ddd89b9b318d45af0ae3e4f21fdd0e2349e9",
+     "referee_ts_ms": 1792000014030,
+     "referee_sig": "b71bdbfbac85baf2d50fd4d9d7eb9b50ae03c12904d2eb7008b563cc37ee76209d7c97ba239ce781deedb3cf5c4da2b92a94b7d53e3519f2256f70d882bc3509"
+    },
+    {
+     "seq": 8,
+     "t_ms": 1792000016000,
+     "frames_hash": "49a010e1c9eada055f1da4b90fa5d0df11aefd2374396bfbafdf6600cb9226f4",
+     "input_hash": "2a11deb3bafcc93c9060a9db131b27c2eb218fca838bbeb660cbd0021be35215",
+     "prev": "38c0f3382f5ba850909ee245ec42ddd89b9b318d45af0ae3e4f21fdd0e2349e9",
+     "hash": "69c9de5c9c00dff79107159c682bba18f45a386f032433f254b839cb76478958",
+     "referee_ts_ms": 1792000016030,
+     "referee_sig": "8860bd0f8c10b4867e5c350687b67f51768cbba9604caab7317b6a2b0ab8f202d952477e1bc8a805b9b43c7a4ba3e91472079bff20d402ae9999cf7623a81c04"
+    },
+    {
+     "seq": 9,
+     "t_ms": 1792000018000,
+     "frames_hash": "97d9305ecdfd77077e053605fbbddb00881b6e3277a20127d7630e98fc9df9f8",
+     "input_hash": "34be6444f396f3a0ead9ffbd12ce8be855802bb0b4a3a58d0074b59db6f99c25",
+     "prev": "69c9de5c9c00dff79107159c682bba18f45a386f032433f254b839cb76478958",
+     "hash": "ce045af4d6a6a1100b6cb50a4d05fd69f367fc53ef13215a6b8db7e842baf63c",
+     "referee_ts_ms": 1792000018030,
+     "referee_sig": "17be1eb262d907f3f58d3fdb45fa8de8231bcbf66828caab2584911ad2e4ee1d383ef4122ae875f58b9eea740da08bb2875d9f980661d715244acc97f7e2aa08"
+    },
+    {
+     "seq": 10,
+     "t_ms": 1792000020000,
+     "frames_hash": "574fd75919f772afe301f795ea90c10eaab25e3700e3632a42fdc242ab68c820",
+     "input_hash": "b91d319e2a9402bc05604e1c8607cfaa9199585bcf4b0144cf53ea14f97a365e",
+     "prev": "ce045af4d6a6a1100b6cb50a4d05fd69f367fc53ef13215a6b8db7e842baf63c",
+     "hash": "d7c05e78eeec73171472c48172f440e4a3fd653668712c8176b7b222e9589f6e",
+     "referee_ts_ms": 1792000020030,
+     "referee_sig": "8c0d4fa49103f84623c1f4e413448110d098dde1ac8a542c76086972d6667c1d77355877c180f27c394e9a8a3f34ebd58dd4f20eb5d02b53a1c995ef7b1c550e"
+    },
+    {
+     "seq": 11,
+     "t_ms": 1792000022000,
+     "frames_hash": "22fde6409794a514df1d8f2a82895c62afba68eff8006ec4136e0d1cb5d4fbaf",
+     "input_hash": "aac9dadd6f2a1bff53899769d38eadd2b87105c81e0aa52e2c4717932c7b7589",
+     "prev": "d7c05e78eeec73171472c48172f440e4a3fd653668712c8176b7b222e9589f6e",
+     "hash": "310a8d63365ec0f042a4148b795076da1831b7d7fce314f10c167bff684a68b8",
+     "referee_ts_ms": 1792000022030,
+     "referee_sig": "29e085433fe53491365b1969352ed5dedfe9ea6e65cbc2f1fd42edba3a28f842bb246f255d2b208022b3fbdc8062d781673796afd182a191e83dec7691317708"
+    },
+    {
+     "seq": 12,
+     "t_ms": 1792000024000,
+     "frames_hash": "1fe27fb47368fed5e20efaa3e3bd990c70d2713b46360faf7893b87f3cc88bd3",
+     "input_hash": "1fb9e24c1dc1aab7b80412eae68902b5e1dde53442b8bfeb19c651fc1f8f125f",
+     "prev": "310a8d63365ec0f042a4148b795076da1831b7d7fce314f10c167bff684a68b8",
+     "hash": "e145e1bdc30f005587599fb0ad0a692e60df3f7fa6351a439539c2330734c64b",
+     "referee_ts_ms": 1792000024030,
+     "referee_sig": "c7ce248c05d8b26dc5f8b811c7e7cb01558e7abc141dfeb30c6ab08cff2f34d1d7d43d023975f9da9fea86425991136932a833236e50b3c54789f11c1ae1090a"
+    },
+    {
+     "seq": 13,
+     "t_ms": 1792000026000,
+     "frames_hash": "7a6529482c396b51ecd6f28aae5bf478f0d65d80c454c400e7ca8dc1defbd61c",
+     "input_hash": "8b6dd8cbce30469e9ac32911411e2bcf19fe79ededb6fa347a90a2fb7eb4b806",
+     "prev": "e145e1bdc30f005587599fb0ad0a692e60df3f7fa6351a439539c2330734c64b",
+     "hash": "4d159652b3e7b47b8941da7e75e1772f7e70178260688959fbd195866e13c4c9",
+     "referee_ts_ms": 1792000026030,
+     "referee_sig": "c00170a8ec7565c78a6dae0076e45972fc59498ad485dd36821897028f595bcbbbdeaf92d61bd1eb10073f74d3dabaa0383215a1f883e95d6425ecf1a8ba3703"
+    },
+    {
+     "seq": 14,
+     "t_ms": 1792000028000,
+     "frames_hash": "dfba70ffbcce839a294a241398768b59bebd8d41ee344465839bb9e38029e41f",
+     "input_hash": "dd2a2d12667407c57c0a957c780bd01a21aeba9aa550b5ae671a99f1faf3c2a5",
+     "prev": "4d159652b3e7b47b8941da7e75e1772f7e70178260688959fbd195866e13c4c9",
+     "hash": "b3d89f9297464afc1d4d7fff0be4d3edad0db3d0df295654c21562d10d28fe10",
+     "referee_ts_ms": 1792000028030,
+     "referee_sig": "1b304082da8d7c661a859d1b620df67eeac488c802734f4bf7b819c12f8f6f04b28cff98ef0b0b322ac3d1f79a22ca788168e41f3749737b0d37cdf8b8ea2d0b"
+    },
+    {
+     "seq": 15,
+     "t_ms": 1792000030000,
+     "frames_hash": "6b5c650c4418515c292eafb8ed08f841bfbc172aed86359a3e6d825d59b2357f",
+     "input_hash": "5f62b3b2d4251054c9670a453c5aba9c8a3953efb13e378a87fad0091d6f9206",
+     "prev": "b3d89f9297464afc1d4d7fff0be4d3edad0db3d0df295654c21562d10d28fe10",
+     "hash": "770d64fe6cfb5710f1e845ec5dc47b3b752e239ac9aada117a3c673338420dd2",
+     "referee_ts_ms": 1792000030030,
+     "referee_sig": "fd44a739d19255848bf4481b156bbfc6d430a80bc924f93f47033730ca15d277effd3bc7cadb71eb0ceaab68b89f6cc41a42827723fb1f20df9e2590fbed9f07"
+    },
+    {
+     "seq": 16,
+     "t_ms": 1792000032000,
+     "frames_hash": "e5d86851015da5dd3f8426db52c8aaf754b26be67f080a27a856e5f1e15a9992",
+     "input_hash": "c726c1e123e92ce71a478aa55333372aa8f25ab5c39aab7aff219302af3e919a",
+     "prev": "770d64fe6cfb5710f1e845ec5dc47b3b752e239ac9aada117a3c673338420dd2",
+     "hash": "68a3bd179ec4337caaa87295c2083e65bf0709035b227f0f3b73b1da9d55f4bd",
+     "referee_ts_ms": 1792000032030,
+     "referee_sig": "3e741dab050e87f283bbb503444f033233db2cdcc1035a1bfd1211c01e0fc2009858cf146722507c27957e507c8b8b7032aa5f077ccd1373fe3415ab3465c70e"
+    },
+    {
+     "seq": 17,
+     "t_ms": 1792000034000,
+     "frames_hash": "b5e969fb88f89108b023981f9b1ac8157f6535bc15442ad2bd24be714055ba76",
+     "input_hash": "fc494d70070bd49f4b2789072f2584948851de757d8e836e1d62bd8de381bd6b",
+     "prev": "68a3bd179ec4337caaa87295c2083e65bf0709035b227f0f3b73b1da9d55f4bd",
+     "hash": "0ef02618a2e92bdd895a29755ce171f52afa09b172e5b1ed0ba3442843e31362",
+     "referee_ts_ms": 1792000034030,
+     "referee_sig": "aa67c4d6e98eab474d5845a51fa4a3c96a21b98f5dbef5e7384dd5046c1e30b705816acadfe1fd0e7c6f97533a5103525d08d5004c916e50470fc08e149be500"
+    },
+    {
+     "seq": 18,
+     "t_ms": 1792000036000,
+     "frames_hash": "e20abd60e5b119631ca4bad554021bd00f0e8daf66bb9627a84ca6a514a12ccc",
+     "input_hash": "3e86ce07b1b6af2150e1f7f43d01d4d610c61d04212b293b323f1970947d8afd",
+     "prev": "0ef02618a2e92bdd895a29755ce171f52afa09b172e5b1ed0ba3442843e31362",
+     "hash": "153c5cd1c64a73556e3d451f4fba3fefd4ca4ffc2595707f6962e3db1006a3fd",
+     "referee_ts_ms": 1792000036030,
+     "referee_sig": "b39b538b1d8e223832bf59aaddedcd402275dc5ca25c9b25c2ca66150e31db682650dfd36e82b745347eb1bb754e728c0e721ec9a416dd2ca847adcfc4038f0b"
+    },
+    {
+     "seq": 19,
+     "t_ms": 1792000038000,
+     "frames_hash": "11a4a076cb0ec3617ad9f57ca1d3c5d709ba93450216925535fd061fc07589f5",
+     "input_hash": "18e6e90ba5c8d73039323c4b7abbd2ce1b68af4995db72a304e25fe987d3240e",
+     "prev": "153c5cd1c64a73556e3d451f4fba3fefd4ca4ffc2595707f6962e3db1006a3fd",
+     "hash": "b40f0d2e4111c68d3c114d11d86f1a9e1820e596b669c47ed22d396379358f92",
+     "referee_ts_ms": 1792000038030,
+     "referee_sig": "c26edc15f660064a63664ac7956dcaeed22ec96d9e58f2c6372ad2763e1784f47b02aa23a9d50158ae9886a4a88809707de251b03ae2b05d507c449de03e2003"
+    },
+    {
+     "seq": 20,
+     "t_ms": 1792000040000,
+     "frames_hash": "408670e1fe28981920762bec8f18b46874efb8d84b1241c251088e9b2cfc94b0",
+     "input_hash": "819dd160aae69209884804cbb58ed0bdad5bd1cc79635b93e8b9aeaf77d667c0",
+     "prev": "b40f0d2e4111c68d3c114d11d86f1a9e1820e596b669c47ed22d396379358f92",
+     "hash": "044e5c28376724f4cdb33733f1a3f3b615df23308cba03ca07bd17f3aed912d5",
+     "referee_ts_ms": 1792000040030,
+     "referee_sig": "000950bf1bb9d501f298d6998cd029aa35f38fc523d5ddea3cf840aac1ee31e041f5d1fc6e3a7b9a72b7883e62c27c44c7acb9513e8df15289bd92fd2b6f9403"
+    }
+   ]
+  },
+  "agreement": {
+   "timelines_agree": null,
+   "mismatches": []
+  },
+  "signals": {
+   "motion_permille": {
+    "home": 935
+   },
+   "motion_basis": "referee-computed: controller report rate vs frame-difference energy per second over the segments the referee decoded",
+   "input": {
+    "inputs_sha256": "874017d40dae66924325803460abe8de70e3627a2dd29965bfe4ca08e97dc58c",
+    "inputs_chain_head": "777dada688d851e85364da167d7e49f43871c2d3b76d0cf07b662e912085b170",
+    "haptic_events": 1,
+    "haptic_high_confidence": 1,
+    "haptics_sha256": "64a6d5533e32737855c9c37ab1a8c6f474fed349e91b08187dd8caf92976db41",
+    "human_permille": 900,
+    "match_permille": 600,
+    "chance_permille": 200,
+    "status": "ok"
+   }
+  },
+  "trust_tier": "single-attested",
+  "signatures": {
+   "players": {
+    "home": {
+     "key_id": "23f161b2b4947047",
+     "sig": "c455e080ddde0b0b3d341092d497a5d655a2d5a91dd2fcf7afea0aee06b39839c66e219fd156491ea1aab01124a74a56eddb73dfdfa3c0ed164f5f3201c79809"
+    }
+   },
+   "referee": {
+    "key_id": "b0c55b07160ad0b3",
+    "sig": "b7e6e52f0cbf173e3bf8afe2aaa7a856ba98de4911aef0626a510ef6f8c6147519aef24996c81efbb2317d1ed46d22ca9830c4592bf3782a6b76d89dd405e608"
+   }
+  },
+  "review": {
+   "type": "qortime-bundle-review/v1",
+   "reviewed_ms": 1792000120000,
+   "submission": "3bbd4206dee9b985",
+   "commit": "eb3bb409081e48ed90fb1a15c2fb8b95c59359a86dbee5f2b0290250d47cd2c9",
+   "capture_referee": {
+    "pubkey": "dcd491742b11619f3a6ff9c9e09eb10878bf1bb59f312bb29393ab9fb2cf3384",
+    "key_id": "0cc928a87da8bbfc",
+    "key_kind": "local-self-attested"
+   },
+   "bundle": {
+    "schema": "qorcap-bundle/v0",
+    "qorcap_version": "test",
+    "chain_head": "49b0d01bd2d3a6eeaf08aaa0a4baa8cd603b2180f9c28216c73498cbdc591d03",
+    "checkpoint_head": "044e5c28376724f4cdb33733f1a3f3b615df23308cba03ca07bd17f3aed912d5",
+    "inputs_chain_head": "777dada688d851e85364da167d7e49f43871c2d3b76d0cf07b662e912085b170",
+    "segments": 21,
+    "bytes": 254599,
+    "local_receipt_sha256": "683e5ee693d640e1dad4474c58c08f98406dedd25c8a90565b7d59c07e7b1b7c"
+   },
+   "checks": {
+    "bundle_structure": {
+     "state": "pass",
+     "detail": "manifest chain, checkpoint chain, inputs chain and receipt binding recomputed by the referee"
+    },
+    "capture_chain": {
+     "state": "pass",
+     "detail": "laptop checkpoint countersignatures valid under the capture key; gaps/skew within limits (timing is the laptop's own clock)"
+    },
+    "video_bytes": {
+     "state": "pass",
+     "detail": {
+      "method": "spot-check",
+      "segments_total": 21,
+      "segments_verified": 21,
+      "bytes_total": 254599,
+      "bytes_verified": 254599,
+      "random_segments": 0,
+      "random_sample": [],
+      "commit": "eb3bb409081e48ed90fb1a15c2fb8b95c59359a86dbee5f2b0290250d47cd2c9",
+      "p_undetected_if_missing_10pct": "1",
+      "p_undetected_if_missing_50pct": "1"
+     }
+    },
+    "final_reread": {
+     "state": "pass",
+     "detail": "end-of-game menu re-read by the referee matches the claimed final"
+    },
+    "challenges": {
+     "state": "pass",
+     "detail": {
+      "count": 3,
+      "notes": []
+     }
+    },
+    "motion": {
+     "state": "pass",
+     "detail": {
+      "bins": 40,
+      "motion_permille": 935,
+      "basis": "referee-computed: controller report rate vs frame-difference energy per second over the segments the referee decoded"
+     }
+    },
+    "input_integrity": {
+     "state": "pass",
+     "detail": {
+      "present": true,
+      "inputs_sha256": "874017d40dae66924325803460abe8de70e3627a2dd29965bfe4ca08e97dc58c",
+      "inputs_chain_head": "777dada688d851e85364da167d7e49f43871c2d3b76d0cf07b662e912085b170",
+      "haptic_events": 1,
+      "haptic_high_confidence": 1,
+      "presses": 15,
+      "errors": [],
+      "note": "hashes/chains/counts recomputed; QorCap's human-likeness and alignment model is not re-run (advisory only)"
+     }
+    }
+   },
+   "anchors": {
+    "valid": 0,
+    "invalid": 0,
+    "first": null,
+    "last": null,
+    "meaning": "each valid anchor proves the video chain up to that segment existed when the official referee stamped it"
+   },
+   "final_reread": {
+    "basis": "end_menu",
+    "home": 14,
+    "away": 7,
+    "quarter": 4,
+    "final_confirmed": true,
+    "notes": [],
+    "scorebug_reads": 1,
+    "stats": {
+     "frames": 4,
+     "agreed": 0,
+     "errors": 0,
+     "paused": 0
+    },
+    "end_menu_rejected": null
+   },
+   "scope": "post-hoc review of an uploaded QorCap bundle by the QorTime official referee: spot-check of 21/21 segments (init, recorded tail, challenge windows, 0 random segments drawn after commit)",
+   "not_proven": [
+    "who was holding the controller (identity)",
+    "that the laptop's local countersignatures were made live: they come from a key on the player's own PC",
+    "that the footage was not fabricated or edited before QorCap hashed it, except where an official challenge or anchor timestamps the chain",
+    "content of video segments the referee did not receive (spot-check mode)"
+   ]
+  }
+ },
+ "referee_pub": "9321a61cde668a9890f307bdd9c09290e02df14754a56333654042104847481a",
+ "allowlist": {
+  "schema": "qortime-trusted-referees/v1",
+  "version": 1,
+  "referees": [
+   {
+    "id": "test-root",
+    "pubkey": "732048cf5d462d302b50c6802a684cc64db8b7d2f5d2536d0f72ae0c444803c3",
+    "key_id": "718e81f0918594e0",
+    "status": "active",
+    "can_delegate": true
+   }
+  ]
+ },
+ "revocations": {
+  "type": "qortime-referee-revocations/v1",
+  "root_id": "test-root",
+  "root_key_id": "718e81f0918594e0",
+  "version": 1,
+  "issued_ms": 1792000000000,
+  "revoked": [],
+  "sig": "c490e84f1e1d55baf9ef2f94440017edce11965638b7e8b577f734bcd7a767435cc6bd79d22e040f48602d71d6251b0685a8a531867d644eee5f75be843ec305"
+ },
+ "root_seed_note": "test-only keys",
+ "revoked_list": {
+  "type": "qortime-referee-revocations/v1",
+  "root_id": "test-root",
+  "root_key_id": "718e81f0918594e0",
+  "version": 2,
+  "issued_ms": 1792000000000,
+  "revoked": [
+   {
+    "serial": 1,
+    "delegate_pubkey": "9321a61cde668a9890f307bdd9c09290e02df14754a56333654042104847481a",
+    "reason": "test",
+    "revoked_ms": 1792000000000
+   }
+  ],
+  "sig": "146fff5d8bab603ba637912157d05d4a58abe9b30877b5abcb5a5c402a0a3dda0b7c057151625f829e39fbbc26d335bb6e8ffe0a32253da2d8e5554c8f030b02"
+ },
+ "log_entries": [
+  {
+   "type": "qortime-log-entry/v1",
+   "seq": 0,
+   "ts_ms": 1792000120000,
+   "kind": "receipt",
+   "body_sha256": "5bfc57a51ac8421b29520eb2484db315a99be42003ee08d725aaad50fda3c73c",
+   "prev": "0000000000000000000000000000000000000000000000000000000000000000",
+   "submission": "3bbd4206dee9b985",
+   "match_id": "local-test-review",
+   "signer_key_id": "b0c55b07160ad0b3",
+   "hash": "eba30b94c0d30b6b3263f7dabf1ebf059b0f0c244b46511ff0f12d5260534ce6"
+  }
+ ],
+ "log_head": {
+  "type": "qortime-log-head/v1",
+  "size": 1,
+  "head": "eba30b94c0d30b6b3263f7dabf1ebf059b0f0c244b46511ff0f12d5260534ce6",
+  "ts_ms": 1792000120000,
+  "pubkey": "9321a61cde668a9890f307bdd9c09290e02df14754a56333654042104847481a",
+  "key_id": "b0c55b07160ad0b3",
+  "delegation_serial": 1,
+  "sig": "7aa00b235e3a89bca22f0832f210ca5db0b307394a925cde0c6f2e05245c6e887f8f14b9cceea3136799e3951c6faffa7de028daee815007fdfa36a6b091d709"
+ }
+}

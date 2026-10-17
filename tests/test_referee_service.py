@@ -322,7 +322,17 @@ def test_http_flow(tmp_path, monkeypatch):
     with zipfile.ZipFile(buf, "w") as z:
         for k, v in e.fx["files"].items():
             z.writestr(f"match-x/{k}", v)
-    r = c.post("/v1/submissions", content=buf.getvalue(), headers={"Content-Type": "application/zip"})
+    assert c.post("/v1/submissions", content=buf.getvalue()).status_code == 426  # unsigned (<= 0.3.9 client)
+    import hashlib
+
+    from qor_receipt.referee_service import submit_auth as A
+
+    dev = e.fx["device"]
+    ch = c.get(f"/v1/submit/challenge?pub={dev.pubkey_hex}").json()
+    hdr = A.sign_request(dev, method="POST", path="/v1/submissions", body=buf.getvalue(), nonce=ch["nonce"],
+                         pow_=A.solve_pow(ch["nonce"], dev.pubkey_hex, ch["pow_bits"]),
+                         bundle_head=hashlib.sha256(e.fx["files"]["manifest.jsonl"]).hexdigest())
+    r = c.post("/v1/submissions", content=buf.getvalue(), headers={"Content-Type": "application/zip", "X-Qor-Submit": hdr})
     assert r.status_code == 200, r.text
     s = r.json()
     h = {"Authorization": f"Bearer {s['upload_token']}"}
@@ -338,4 +348,4 @@ def test_http_flow(tmp_path, monkeypatch):
     ch = c.post("/v1/challenges", json={"phase": "halftime"}).json()
     assert verify_token(ch, e.key.pubkey_hex, CHALLENGE_TOKEN_TYPE)
     bad = c.post("/v1/submissions", content=b"not a zip")
-    assert bad.status_code == 400
+    assert bad.status_code == 426  # unsigned: rejected before the body is even parsed

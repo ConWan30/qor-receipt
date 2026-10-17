@@ -1,6 +1,7 @@
 // qor-receipt v0 verifier (browser + Node 20). Mirrors qor_receipt/receipt.py exactly.
 import * as ed from "./vendor/noble-ed25519.js";
 import { TRUSTED_REFEREES } from "./trusted_referees.inc.js";
+import { REFEREE_REVOCATIONS } from "./referee_revocations.inc.js";
 
 export const SCHEMA = "qor-receipt/v0";
 export const SELF_ATTESTED = "SELF_ATTESTED";
@@ -21,6 +22,83 @@ const REQUIRED_REVIEW_CHECKS = ["video_bytes", "final_reread", "capture_chain", 
 const enc = new TextEncoder();
 
 export function loadAllowlist() { return TRUSTED_REFEREES; }
+
+// ---- Delegated referee keys (mirrors qor_receipt/delegation.py) -------------------------------------------------
+export const DELEGATION_TYPE = "qortime-referee-delegation/v1";
+export const REVOCATIONS_TYPE = "qortime-referee-revocations/v1";
+const SCOPE_REVIEW = "official-review";
+const FUTURE_SLACK_MS = 10 * 60000, MAX_LIFETIME_MS = 120 * 86400000;
+const isInt = (v) => typeof v === "number" && Number.isSafeInteger(v);
+async function rootFor(keyId, allowlist) {
+  for (const r of (allowlist || {}).referees || []) {
+    if (r.status === "active" && r.can_delegate === true && r.pubkey && (await kid(String(r.pubkey).toLowerCase())) === keyId) return r;
+  }
+  return null;
+}
+export async function revocationsProblem(doc, allowlist = TRUSTED_REFEREES) {
+  if (doc == null) return "revocations_missing";
+  if (typeof doc !== "object" || doc.type !== REVOCATIONS_TYPE || typeof doc.sig !== "string") return "revocations_malformed";
+  const root = await rootFor(doc.root_key_id, allowlist);
+  if (!root || !(await edVerify(String(root.pubkey).toLowerCase(), doc.sig, enc.encode(canonicalize(without(doc, "sig")))))) return "revocations_bad_signature";
+  return null;
+}
+export async function checkDelegation(cert, signerPub, atMs, { allowlist = TRUSTED_REFEREES, revocations = REFEREE_REVOCATIONS, nowMs = null } = {}) {
+  if (!cert || typeof cert !== "object" || cert.type !== DELEGATION_TYPE || typeof cert.sig !== "string") return { info: null, problems: ["delegation_malformed"] };
+  const root = await rootFor(cert.root_key_id, allowlist);
+  if (!root) return { info: null, problems: ["delegation_root_not_trusted"] };
+  const rootPub = String(root.pubkey).toLowerCase();
+  if (!(await edVerify(rootPub, cert.sig, enc.encode(canonicalize(without(cert, "sig")))))) return { info: null, problems: ["delegation_bad_signature"] };
+  const probs = [];
+  const dpub = String(cert.delegate_pubkey || "").toLowerCase();
+  if (dpub !== String(signerPub || "").toLowerCase() || cert.delegate_key_id !== (await kid(dpub))) probs.push("delegation_key_mismatch");
+  if (dpub === rootPub) probs.push("delegation_to_root");
+  if (!(cert.scope || []).includes(SCOPE_REVIEW)) probs.push("delegation_scope");
+  const nb = cert.not_before_ms, na = cert.not_after_ms;
+  if (!isInt(nb) || !isInt(na) || na <= nb) probs.push("delegation_window_malformed");
+  else if (na - nb > MAX_LIFETIME_MS) probs.push("delegation_lifetime_too_long");
+  else if (!isInt(atMs)) probs.push("delegation_signing_time_missing");
+  else {
+    if (atMs < nb) probs.push("delegation_not_yet_valid");
+    if (atMs > na) probs.push("delegation_expired");
+    if (atMs > (nowMs ?? Date.now()) + FUTURE_SLACK_MS) probs.push("delegation_signing_time_in_future");
+  }
+  const rp = await revocationsProblem(revocations, allowlist);
+  if (rp) probs.push(rp);
+  else if ((revocations.revoked || []).some((x) => x.serial === cert.serial || String(x.delegate_pubkey || "").toLowerCase() === dpub)) {
+    probs.push(`delegation_revoked:${cert.serial}`);
+  }
+  if (probs.length) return { info: null, problems: probs };
+  return { info: { id: cert.delegate_id, status: "active", delegated_by: root.id, serial: cert.serial,
+                   allowed_statuses: [...(cert.allowed_statuses || [])], not_after_ms: na }, problems: [] };
+}
+
+// ---- Transparency log (mirrors qor_receipt/translog.py) ----------------------------------------------------------
+export const LOG_ENTRY_TYPE = "qortime-log-entry/v1", LOG_HEAD_TYPE = "qortime-log-head/v1";
+export async function receiptBodyHash(r) { return sha256Hex(without(r, "signatures")); }
+export async function verifyLogEntries(entries, startPrev = "0".repeat(64), startSeq = 0) {
+  const errs = [];
+  let prev = startPrev, seq = startSeq;
+  for (const e of entries) {
+    if (e.type !== LOG_ENTRY_TYPE || e.seq !== seq) errs.push(`seq:${seq}`);
+    if (e.prev !== prev) errs.push(`prev:${seq}`);
+    if (e.hash !== (await sha256Hex(without(e, "hash")))) errs.push(`hash:${seq}`);
+    prev = e.hash; seq += 1;
+  }
+  return errs;
+}
+export async function verifyLogHead(h, pub) {
+  return !!(h && h.type === LOG_HEAD_TYPE && typeof h.sig === "string" && h.key_id === (await kid(pub))
+    && (await edVerify(pub, h.sig, enc.encode(canonicalize(without(h, "sig"))))));
+}
+export async function verifyInclusion(bodyHash, entries, head) {
+  if (!entries || !entries.length) return ["inclusion_no_entries"];
+  const first = entries[0], last = entries[entries.length - 1];
+  const errs = [];
+  if (first.body_sha256 !== bodyHash) errs.push("inclusion_wrong_entry");
+  errs.push(...(await verifyLogEntries(entries, first.prev, first.seq)));
+  if (head.size !== last.seq + 1 || head.head !== last.hash) errs.push("inclusion_head_mismatch");
+  return errs;
+}
 export function lookupReferee(pubkey, allowlist = TRUSTED_REFEREES) {
   if (!pubkey || typeof pubkey !== "string") return null;
   const want = pubkey.toLowerCase();
@@ -130,11 +208,12 @@ const isHex64 = (v) => typeof v === "string" && /^[0-9a-fA-F]{64}$/.test(v);
 
 // Review receipts: the nonce must come from a token signed by an allowlisted active referee key for exactly this
 // nonce / phase / window. Mirrors receipt.official_challenge_ok.
-export async function officialChallengeOk(c, allowlist = TRUSTED_REFEREES) {
+export async function officialChallengeOk(c, allowlist = TRUSTED_REFEREES, delegatePub = null) {
   const tok = c && c.issuer;
   if (!tok || typeof tok !== "object" || tok.type !== CHALLENGE_TOKEN_TYPE || typeof tok.sig !== "string") return false;
   for (const k of ["nonce", "phase", "issued_ms", "deadline_ms"]) if (tok[k] !== c[k]) return false;
   const payload = enc.encode(canonicalize(without(tok, "sig")));
+  if (delegatePub && tok.key_id === (await kid(delegatePub)) && (await edVerify(delegatePub, tok.sig, payload))) return true;
   for (const row of (allowlist || {}).referees || []) {
     const pub = String(row.pubkey || "").toLowerCase();
     if (row.status === "active" && tok.key_id === (await kid(pub)) && (await edVerify(pub, tok.sig, payload))) return true;
@@ -197,7 +276,9 @@ export function inputProofAdvisory(signals) {
 
 export async function verifyReceipt(r, refereePub = null, opts = {}) {
   const allowlist = (opts && opts.allowlist) || TRUSTED_REFEREES;
+  const revocations = opts && "revocations" in opts ? opts.revocations : REFEREE_REVOCATIONS;
   let reviewMode = false;
+  let delegate = null;
   const errors = [], partial = [];
   let tier = null;
   let trustedRef = false;
@@ -215,7 +296,15 @@ export async function verifyReceipt(r, refereePub = null, opts = {}) {
     refereeEntry = lookupReferee(ref.pubkey, allowlist);
     if (refereeEntry && refereeEntry.status === "active") trustedRef = true;
     else if (refereeEntry && refereeEntry.status === "revoked") partial.push(`referee_revoked:${refereeEntry.id}`);
-    else partial.push("referee_not_on_allowlist");
+    else if (ref.delegation != null) {
+      if (ref.key_kind !== REVIEW_KEY_KIND) partial.push("delegation_scope");
+      else {
+        const d = await checkDelegation(ref.delegation, ref.pubkey, (r.review || {}).reviewed_ms,
+                                        { allowlist, revocations, nowMs: opts && opts.nowMs });
+        if (d.info) { delegate = d.info; trustedRef = true; refereeEntry = d.info; }
+        else partial.push(...d.problems);
+      }
+    } else partial.push("referee_not_on_allowlist");
 
     let players = r.players;
     if (!Array.isArray(players) || !players.length) {
@@ -264,7 +353,8 @@ export async function verifyReceipt(r, refereePub = null, opts = {}) {
         break;
       }
     }
-    if (refereePub != null && !isTrustedActive(refereePub, allowlist)) {
+    const pinIsDelegate = !!(delegate && refereePub != null && refereePub.toLowerCase() === ref.pubkey.toLowerCase());
+    if (refereePub != null && !pinIsDelegate && !isTrustedActive(refereePub, allowlist)) {
       trustedRef = false;
       if (!partial.includes("referee_pin_not_allowlisted")) partial.push("referee_pin_not_allowlisted");
     }
@@ -284,7 +374,7 @@ export async function verifyReceipt(r, refereePub = null, opts = {}) {
           else if (!c.result.ok) errors.push(`${role}:${ph}:challenge_failed:${c.result.reason}`);
           else {
             const evErrs = challengeEvidenceErrors(c, r.checkpoints[role]);
-            if (reviewMode && !(await officialChallengeOk(c, allowlist))) evErrs.push("challenge_nonce_not_official");
+            if (reviewMode && !(await officialChallengeOk(c, allowlist, delegate ? r.referee.pubkey : null))) evErrs.push("challenge_nonce_not_official");
             for (const e of evErrs) partial.push(`${role}:${ph}:${e}`);
           }
         }
@@ -311,12 +401,17 @@ export async function verifyReceipt(r, refereePub = null, opts = {}) {
   else if (!trustedRef) status = SELF_ATTESTED;
   else if (partial.length) status = "PARTIAL";
   else status = "VERIFIED";
+  if (delegate && (status === "VERIFIED" || status === "PARTIAL") && !delegate.allowed_statuses.includes(status)) {
+    partial.push(`delegation_caps_status:${status}`);
+    status = delegate.allowed_statuses.includes("PARTIAL") ? "PARTIAL" : SELF_ATTESTED;
+  }
   const out = {
     status, trust_tier: tier, errors, partial,
     referee_trust: trustedRef ? "active" : (refereeEntry && refereeEntry.status === "revoked" ? "revoked" : "untrusted"),
     input_advisory: inputAdvisory,
   };
   if (refereeEntry) out.referee_id = refereeEntry.id;
+  if (delegate) out.delegation = { serial: delegate.serial, delegated_by: delegate.delegated_by, not_after_ms: delegate.not_after_ms };
   if (reviewMode && r.review && typeof r.review === "object") {
     const vb = (((r.review.checks || {}).video_bytes || {}).detail) || {};
     out.verification_basis = "official-post-hoc-review";

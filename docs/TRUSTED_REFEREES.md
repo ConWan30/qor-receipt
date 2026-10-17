@@ -27,10 +27,10 @@ Never commit, paste, or log that seed. Only the pubkey belongs in the allowlist 
 
 QorCap Start Match continues to use a **local** `referee.key` (`key_kind: local-self-attested`). Those receipts are intentionally SELF_ATTESTED until an independent QorTime referee co-signs.
 
-## Online copy: the referee service (verified uploads)
+## Online signing: delegated service key (since 2026-10-16)
 
-Since 2026-10-16 the `qortime-v1` seed is also held by the official referee service as the Railway service
-variable `QORTIME_REFEREE_SEED` (service `qortime-referee`). It countersigns uploaded QorCap bundles only after
-re-checking them (`docs/REFEREE_SERVICE.md`); those receipts carry `referee.key_kind: qortime-official-review`
-and a signed `review` block. Rotating the key means updating that variable too (step 1b): set the new seed on the
-service, redeploy, then revoke the old entry here.
+`qortime-v1` is now marked `"can_delegate": true, "role": "root"` and **no longer runs online**. The referee service signs
+with a short-lived online key certified by a root-signed `qortime-referee-delegation/v1` cert embedded in each receipt
+(`referee.delegation`). Verifiers trust such receipts only while the cert is valid at signing time and not revoked
+(`referee_revocations.json`, root-signed; JS twin `verify/referee_revocations.json` + `.inc.js`). Details, rotation and
+revocation: `docs/REFEREE_KEYS.md`. Receipts signed directly by `qortime-v1` before the switch stay VERIFIED.

@@ -186,8 +186,11 @@ $("go").onclick = async () => {
     ? `basis: official post-hoc review (${v.review?.video_method}: ${v.review?.segments_verified}/${v.review?.segments_total} video segments checked by the QorTime referee)\n` +
       `not proven: ${(v.review?.not_proven || []).join("; ")}\n`
     : "";
+  const deleg = v.delegation
+    ? `signed by: online referee key ${v.referee_id} (delegation serial ${v.delegation.serial} from root ${v.delegation.delegated_by}, valid until ${new Date(v.delegation.not_after_ms).toISOString().slice(0, 10)}; not revoked)\n`
+    : "";
   $("out").textContent = `match ${r.match?.match_id}  ${r.match?.game}/${r.match?.platform}\n` +
-    `final: away ${res.away_score} @ home ${res.home_score} (Q${res.quarter}), winner ${res.winner}\n` + basis + "\n" + JSON.stringify(v, null, 2);
+    `final: away ${res.away_score} @ home ${res.home_score} (Q${res.quarter}), winner ${res.winner}\n` + basis + deleg + "\n" + JSON.stringify(v, null, 2);
   watchReceipt();
 };
 </script></body></html>

@@ -13,12 +13,13 @@ import copy
 from typing import Any
 
 from qor_receipt import SCHEMA
+from qor_receipt import delegation as D
 from qor_receipt.challenge import DEFAULT_LEN, PHASES, pattern_for
 from qor_receipt.checkpoints import verify_chain
 from qor_receipt.jcs import canonicalize
 from qor_receipt.keys import KeyProvider, kid, verify  # noqa: F401
 from qor_receipt.review.policy import CHALLENGE_TOKEN_TYPE, CHECK_STATES, FAIL_CHECK, PARTIAL_CHECK, REVIEW_KEY_KIND, REVIEW_TYPE
-from qor_receipt.trusted_referees import is_trusted_active, lookup
+from qor_receipt.trusted_referees import is_trusted_active, load_allowlist, lookup
 
 VERIFIED, PARTIAL, SELF_ATTESTED, FAIL = "VERIFIED", "PARTIAL", "SELF_ATTESTED", "FAIL"
 DUAL, SINGLE = "dual-attested", "single-attested"
@@ -103,7 +104,8 @@ def _is_hex64(v: Any) -> bool:
     return isinstance(v, str) and len(v) == 64 and all(ch in "0123456789abcdef" for ch in v.lower())
 
 
-def official_challenge_ok(c: dict[str, Any], *, allowlist_path: str | None = None) -> bool:
+def official_challenge_ok(c: dict[str, Any], *, allowlist_path: str | None = None,
+                          delegate_pub: str | None = None) -> bool:
     """Review receipts: the challenge nonce must come from a token signed by an allowlisted active referee key,
     issued for exactly this nonce / phase / window (so the pattern could not be known before issued_ms)."""
     tok = c.get("issuer")
@@ -115,6 +117,9 @@ def official_challenge_ok(c: dict[str, Any], *, allowlist_path: str | None = Non
     from qor_receipt.trusted_referees import load_allowlist
 
     payload = canonicalize({k: v for k, v in tok.items() if k != "sig"})
+    # Delegated service key (already validated against the root-signed cert by the caller) may sign tokens too.
+    if delegate_pub and tok.get("key_id") == kid(delegate_pub) and verify(delegate_pub, tok["sig"], payload):
+        return True
     for row in load_allowlist(allowlist_path).get("referees") or []:
         pub = str(row.get("pubkey", "")).lower()
         if row.get("status") == "active" and tok.get("key_id") == kid(pub) and verify(pub, tok["sig"], payload):
@@ -223,13 +228,15 @@ def _input_proof_advisory(signals: dict[str, Any] | None) -> dict[str, Any] | No
 
 
 def verify_receipt(r: dict[str, Any], *, referee_pub: str | None = None,
-                   allowlist_path: str | None = None) -> dict[str, Any]:
+                   allowlist_path: str | None = None, revocations_path: str | None = None,
+                   now_ms: int | None = None) -> dict[str, Any]:
     errors: list[str] = []
     partial: list[str] = []
     trusted_ref = False
     input_advisory = _input_proof_advisory(r.get("signals") if isinstance(r, dict) else None)
     referee_entry: dict[str, Any] | None = None
     review_mode = False
+    delegate: dict[str, Any] | None = None
     try:
         if r.get("schema") != SCHEMA:
             return {"status": FAIL, "trust_tier": None, "errors": ["schema"], "partial": [],
@@ -250,6 +257,20 @@ def verify_receipt(r: dict[str, Any], *, referee_pub: str | None = None,
             trusted_ref = True
         elif referee_entry and referee_entry.get("status") == "revoked":
             partial.append(f"referee_revoked:{referee_entry.get('id')}")
+        elif ref.get("delegation") is not None:
+            # Online service key certified by an offline root key (qor_receipt.delegation).
+            if ref.get("key_kind") != REVIEW_KEY_KIND:
+                partial.append("delegation_scope")
+            else:
+                delegate, dprobs = D.check_delegation(
+                    ref["delegation"], ref["pubkey"], (r.get("review") or {}).get("reviewed_ms"),
+                    allowlist=load_allowlist(allowlist_path), revocations=D.load_revocations(revocations_path),
+                    now_ms=now_ms)
+                if delegate:
+                    trusted_ref = True
+                    referee_entry = delegate
+                else:
+                    partial += dprobs
         else:
             partial.append("referee_not_on_allowlist")
 
@@ -304,7 +325,8 @@ def verify_receipt(r: dict[str, Any], *, referee_pub: str | None = None,
 
         # Pin must be an allowlisted active key for VERIFIED. A URL/?referee= pin of an
         # unknown key never upgrades trust (loud warning is UI-side).
-        if referee_pub is not None and not is_trusted_active(referee_pub, path=allowlist_path):
+        pin_is_delegate = bool(delegate and referee_pub is not None and referee_pub.lower() == ref["pubkey"].lower())
+        if referee_pub is not None and not pin_is_delegate and not is_trusted_active(referee_pub, path=allowlist_path):
             trusted_ref = False
             if "referee_pin_not_allowlisted" not in partial:
                 partial.append("referee_pin_not_allowlisted")
@@ -334,7 +356,8 @@ def verify_receipt(r: dict[str, Any], *, referee_pub: str | None = None,
                     else:
                         # Do not trust bare result.ok: require committed evidence + live referee window.
                         ev_errs = _challenge_evidence_errors(c, r["checkpoints"].get(role, []))
-                        if review_mode and not official_challenge_ok(c, allowlist_path=allowlist_path):
+                        if review_mode and not official_challenge_ok(
+                                c, allowlist_path=allowlist_path, delegate_pub=ref["pubkey"] if delegate else None):
                             ev_errs.append("challenge_nonce_not_official")
                         if ev_errs:
                             for e in ev_errs:
@@ -374,12 +397,18 @@ def verify_receipt(r: dict[str, Any], *, referee_pub: str | None = None,
         status = PARTIAL
     else:
         status = VERIFIED
+    if delegate and status in (VERIFIED, PARTIAL) and status not in delegate["allowed_statuses"]:
+        partial.append(f"delegation_caps_status:{status}")
+        status = PARTIAL if PARTIAL in delegate["allowed_statuses"] else SELF_ATTESTED
 
     out = {"status": status, "trust_tier": tier, "errors": errors, "partial": partial,
            "referee_trust": ("active" if trusted_ref else ("revoked" if referee_entry and referee_entry.get("status") == "revoked" else "untrusted")),
            "input_advisory": input_advisory}
     if referee_entry:
         out["referee_id"] = referee_entry.get("id")
+    if delegate:
+        out["delegation"] = {"serial": delegate["serial"], "delegated_by": delegate["delegated_by"],
+                             "not_after_ms": delegate["not_after_ms"]}
     if review_mode and isinstance(r.get("review"), dict):
         rv = r["review"]
         vb = ((rv.get("checks") or {}).get("video_bytes") or {}).get("detail") or {}

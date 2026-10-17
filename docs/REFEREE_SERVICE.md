@@ -9,18 +9,18 @@ Service: `https://qortime-referee-production.up.railway.app` (Railway, project `
 `qortime-referee`, Dockerfile `services/referee/Dockerfile`). Code: `qor_receipt/review/` (engine, checks) and
 `qor_receipt/referee_service/app.py` (HTTP). Client: `qorcap submit` / "Submit for Verification" in QorCap ≥ 0.3.9.
 
-## Where the signing key lives
+## Where the signing key lives (since 2026-10-16, see `docs/REFEREE_KEYS.md`)
 
-- The official Ed25519 seed is a **Railway service variable** `QORTIME_REFEREE_SEED` on `qortime-referee`
-  (sealed; set from the operator box without being printed). It is read once at start-up into memory; it is not
-  in git, not in the image, never logged and never returned by any endpoint (`/v1/referee` returns only the pubkey).
-- The offline copy stays at `/workspace/qortime-keys/qortime-referee-v1.key` (0600) on the operator box.
-- **Not** on any player laptop. The laptop keeps only its own device key and local capture-referee key.
-- Who can sign as the official referee: this service process, and anyone with write access to the Railway project
-  or the operator box. That is a deliberate trade (an always-on referee needs an online key). If the Railway
-  project is ever compromised: rotate per `docs/TRUSTED_REFEREES.md` (new seed → new allowlist entry → old one
-  `revoked`, so its receipts drop to SELF_ATTESTED). A dedicated online key (`qortime-online-v1`) with the offline
-  `qortime-v1` kept cold is the recommended next step.
+- **Root `qortime-v1`** (`a5aa0c91…feea`, allowlist `can_delegate`) is **offline**. The only copy is
+  `/workspace/qortime-keys/qortime-referee-v1.key` (0600) on the operator box. It is **not** on Railway. Its only jobs
+  are to sign delegation certificates and the revocation list.
+- **The online service key** (`qortime-online-sN`) is the Railway variable `QORTIME_SERVICE_SEED`, and its root-signed
+  cert is `QORTIME_DELEGATION`. The cert is valid for at most 90 days, is limited to scope `official-review`, and caps the
+  verdict at VERIFIED/PARTIAL. Anyone with Railway write access can still sign *as that delegate*. They cannot mint new
+  delegations, cannot extend the window, and can be cut off with one root-signed revocation. Every honest signature also
+  lands in the public transparency log (`/v1/log`), which is anchored in this repo.
+- **Not** on any player laptop. The laptop keeps only its own device key (which now also signs submit requests) and its
+  local capture-referee key.
 
 ## Flow
 
@@ -95,19 +95,23 @@ Not proven (also embedded in every receipt as `review.not_proven`):
 ## Operations
 
 ```
-GET  /health                 {"ok":true,"allowlisted":true}
+GET  /health                 {"ok":true,"allowlisted":true,"delegation":{valid,serial,days_left},"log_size":N}
+GET  /v1/submit/challenge?pub=<hex>   nonce + pow_bits for a signed submission (docs/REFEREE_KEYS.md §3)
+GET  /v1/log/head | /v1/log?start= | /v1/log/inclusion/{body_sha256}   transparency log
 GET  /v1/referee             pubkey, key_id, policy, final_reader/ffmpeg availability
 POST /v1/challenges          {"phase":"kickoff|halftime|end","role":"home","match_id":"…","anchor":{"chain_head":"…"}}
 POST /v1/anchors             {"match_id":"…","anchor":{"chain_head":"…","segment_seq":N,"checkpoint_head":"…"}}
-POST /v1/submissions?mode=spot-check|full     body: application/zip
+POST /v1/submissions?mode=spot-check|full     body: application/zip, header X-Qor-Submit (QorCap >= 0.3.10)
 ```
 
-Env: `QORTIME_REFEREE_SEED` (secret), `QORTIME_REFEREE_ID`, `QORCAP_SIDECAR` (baked into the image at a pinned
+Env: `QORTIME_SERVICE_SEED` + `QORTIME_DELEGATION` (secret online key + root cert; legacy `QORTIME_REFEREE_SEED` is
+dev-only), `QORTIME_STATE_DIR` (volume `/data`: transparency log + known install keys), `QORTIME_REFEREE_ID`, `QORCAP_SIDECAR` (baked into the image at a pinned
 QorCap SHA), `QORTIME_RANDOM_SEGMENTS` (16), `QORTIME_TAIL_MS` (240000), `QORTIME_MAX_ACTIVE` (4),
-`QORTIME_SUBMIT_TOKEN` (optional shared secret for submissions; unset = open).
+`QORTIME_SUBMIT_TOKEN` (optional admin override; without it every submission must be install-key signed),
+`QORTIME_POW_BITS_*`, `QORTIME_RATE_*`, `QORTIME_REQUIRE_RECORDER_MATCH` (default 1).
 
 In-flight submissions live in `/tmp` and expire after 1 h (a restart drops them; the client just re-submits).
-The service has no volume, so nothing is persisted.
+The transparency log and the known-install-key list persist on the Railway volume mounted at `/data`.
 
 ### Deployment record (2026-10-16 CDT)
 

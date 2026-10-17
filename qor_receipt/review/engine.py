@@ -69,6 +69,7 @@ class Submission:
     created_ms: int
     upload_token: str
     bundle: B.Bundle
+    log_entry: dict | None = None
     state: str = "new"  # rejected | awaiting_segments | refused | awaiting_player_signature | complete
     errors: list[str] = field(default_factory=list)
     commit: str | None = None
@@ -93,8 +94,11 @@ class Submission:
 class Referee:
     def __init__(self, key: KeyProvider, *, workdir: str | Path, now: Callable[[], int] | None = None,
                  rng: Any = None, core_factory: Any = "sidecar", sidecar_dir: str | None = None,
-                 random_segments: int = RANDOM_SEGMENTS, tail_ms: int = TAIL_MS, referee_id: str = "qortime-v1") -> None:
+                 random_segments: int = RANDOM_SEGMENTS, tail_ms: int = TAIL_MS, referee_id: str = "qortime-v1",
+                 delegation: dict[str, Any] | None = None, log: Any = None) -> None:
         self.key = key
+        self.delegation = delegation  # root-signed qortime-referee-delegation/v1 cert for this (online) key, if any
+        self.log = log  # qor_receipt.translog.TransparencyLog (every signed receipt is appended before release)
         self.workdir = Path(workdir)
         self.workdir.mkdir(parents=True, exist_ok=True)
         self.now = now or (lambda: int(time.time() * 1000))
@@ -111,7 +115,9 @@ class Referee:
         return {"id": self.referee_id, "pubkey": self.key.pubkey_hex, "key_id": self.key.key_id, "key_kind": REVIEW_KEY_KIND,
                 "review_type": REVIEW_TYPE, "final_reader": self.core_factory is not None,
                 "ffmpeg": M.ffmpeg_bin() is not None,
-                "policy": {"random_segments": self.random_segments, "tail_ms": self.tail_ms, "modes": [SPOT, FULL]}}
+                "policy": {"random_segments": self.random_segments, "tail_ms": self.tail_ms, "modes": [SPOT, FULL]},
+                "delegation": self.delegation,
+                "log": ({"size": len(self.log.entries), "head": self.log.head} if self.log is not None else None)}
 
     def _sign_token(self, tok: dict[str, Any]) -> dict[str, Any]:
         tok = dict(tok, key_id=self.key.key_id)
@@ -341,6 +347,11 @@ class Referee:
         if any(c["state"] == FAIL_CHECK for c in checks.values()):
             sub.state = "refused"
             return sub.public()
+        if self.delegation and not (int(self.delegation.get("not_before_ms", 0)) <= self.now()
+                                    <= int(self.delegation.get("not_after_ms", 0))):
+            sub.review["post_sign_errors"] = ["service delegation certificate is not valid now (rotate the key)"]
+            sub.state = "refused"
+            return sub.public()
         rec = self._build(sub, final, ch_out, mp, mdetail, review)
         v = R.verify_receipt(rec, referee_pub=self.key.pubkey_hex)
         blocking = [e for e in v["errors"] if not e.startswith("missing_player_signature")]
@@ -348,11 +359,18 @@ class Referee:
             sub.review["post_sign_errors"] = blocking
             sub.state = "refused"
             return sub.public()
+        if self.log is not None:
+            from qor_receipt.translog import body_sha256
+
+            le = self.log.append("receipt", body_sha256(rec), submission=sub.id, match_id=str(rec["match"].get("match_id")))
+            sub.log_entry = le  # not part of the signed receipt; returned to the client
         sub.receipt = rec
         sub.state = "awaiting_player_signature"
         out = sub.public()
         out["receipt"] = rec
         out["signing_bytes_sha256"] = hashlib.sha256(R.signing_bytes(rec)).hexdigest()
+        if sub.log_entry:
+            out["log_entry"] = sub.log_entry
         return out
 
     def _challenges(self, sub: Submission, rd, wmm: int) -> tuple[list[dict], dict[str, Any]]:
@@ -448,6 +466,12 @@ class Referee:
                 "meaning": "each valid anchor proves the video chain up to that segment existed when the official "
                            "referee stamped it"}
 
+    def _referee_block(self) -> dict[str, Any]:
+        blk = {"pubkey": self.key.pubkey_hex, "key_id": self.key.key_id, "key_kind": REVIEW_KEY_KIND}
+        if self.delegation:
+            blk["delegation"] = copy.deepcopy(self.delegation)
+        return blk
+
     def _build(self, sub: Submission, final: dict | None, challenges: list[dict], mp: int | None, mdetail: dict,
                review: dict) -> dict[str, Any]:
         b = sub.bundle
@@ -458,7 +482,7 @@ class Referee:
         if (lr.get("signals") or {}).get("input"):
             signals["input"] = lr["signals"]["input"]
         rec = R.build(match=dict(lr["match"]), result=res, players=copy.deepcopy(lr["players"]),
-                      referee={"pubkey": self.key.pubkey_hex, "key_id": self.key.key_id, "key_kind": REVIEW_KEY_KIND},
+                      referee=self._referee_block(),
                       challenges=challenges, checkpoints={role: copy.deepcopy(lr["checkpoints"][role])},
                       agreement=lr.get("agreement") or {"timelines_agree": None, "mismatches": []}, signals=signals)
         rec["review"] = review
