@@ -8,8 +8,8 @@ ok(canonicalize(v.input) === v.canonical, "jcs canonical parity with python");
 ok((await sha256Hex(v.input)) === v.sha256, "jcs sha256 parity with python");
 const d = JSON.parse(readFileSync(new URL("../tests/vectors/demo_receipt_dual.json", import.meta.url)));
 let r = await verifyReceipt(d.receipt, d.referee_pub);
-ok(r.status === "VERIFIED" && r.trust_tier === "dual-attested", "python receipt VERIFIED dual-attested in JS");
-ok((await verifyReceipt(d.receipt, null)).status === "PARTIAL", "unpinned referee => PARTIAL");
+ok(r.status === "SELF_ATTESTED" && r.trust_tier === "dual-attested", "ephemeral demo referee => SELF_ATTESTED in JS");
+ok((await verifyReceipt(d.receipt, null)).status === "SELF_ATTESTED", "unpinned ephemeral referee => SELF_ATTESTED");
 const t = structuredClone(d.receipt); t.result.home_score = 99;
 ok((await verifyReceipt(t, d.referee_pub)).status === "FAIL", "tampered score => FAIL");
 const t2 = structuredClone(d.receipt); t2.checkpoints.home.splice(3, 1);
@@ -18,5 +18,5 @@ const t3 = structuredClone(d.receipt); t3.trust_tier = "dual-attested"; t3.match
 ok((await verifyReceipt(t3, d.referee_pub)).status === "FAIL", "tier upgrade => FAIL");
 const a = JSON.parse(readFileSync(new URL("../tests/vectors/agent_replay_receipt.json", import.meta.url)));
 r = await verifyReceipt(a.receipt, a.referee_pub);
-ok(r.status === "VERIFIED" && r.trust_tier === "single-attested", "agent replay receipt VERIFIED in JS");
+ok(r.status === "SELF_ATTESTED" && r.trust_tier === "single-attested", "agent replay ephemeral referee => SELF_ATTESTED in JS");
 process.exit(fails ? 1 : 0);

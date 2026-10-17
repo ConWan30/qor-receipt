@@ -1,0 +1,18 @@
+// Auto-generated from trusted_referees.json — do not edit by hand.
+export const TRUSTED_REFEREES = {
+  "schema": "qortime-trusted-referees/v1",
+  "version": 1,
+  "updated": "2026-10-16",
+  "docs": "https://conwan30.github.io/qortime/verify/",
+  "rotation": "To rotate: add a new active entry, keep the old pubkey with status revoked (receipts that used it become SELF_ATTESTED). Never reuse a revoked seed. Private keys live only on the operator box, never in git.",
+  "referees": [
+    {
+      "id": "qortime-v1",
+      "pubkey": "a5aa0c9121db2c517284bf1c49eeec199829ca832a2b665f26e872e01192feea",
+      "key_id": "53eea1b5d23b1ff0",
+      "status": "active",
+      "since": "2026-10-16",
+      "label": "QorTime official referee v1"
+    }
+  ]
+};

@@ -1,7 +1,9 @@
 // qor-receipt v0 verifier (browser + Node 20). Mirrors qor_receipt/receipt.py exactly.
 import * as ed from "./vendor/noble-ed25519.js";
+import { TRUSTED_REFEREES } from "./trusted_referees.inc.js";
 
 export const SCHEMA = "qor-receipt/v0";
+export const SELF_ATTESTED = "SELF_ATTESTED";
 const PHASES = ["kickoff", "halftime", "end"];
 const ALPHABET = ["CROSS", "CIRCLE", "SQUARE", "TRIANGLE", "UP", "DOWN", "LEFT", "RIGHT"];
 const MAX_GAP_MS = 10000, MAX_SKEW_MS = 3000, MOTION_MIN = 300;
@@ -12,7 +14,18 @@ const LOCAL_REFEREE_PREFIXES = ["local-self-attested"];
 const UNVERIFIED_KIND_CLAIMS = new Set(["tpm"]);
 const enc = new TextEncoder();
 
-function cmpUtf16(a, b) { // JS strings are UTF-16: plain code-unit compare = RFC 8785 order
+export function loadAllowlist() { return TRUSTED_REFEREES; }
+export function lookupReferee(pubkey) {
+  if (!pubkey || typeof pubkey !== "string") return null;
+  const want = pubkey.toLowerCase();
+  return (TRUSTED_REFEREES.referees || []).find((r) => String(r.pubkey || "").toLowerCase() === want) || null;
+}
+export function isTrustedActive(pubkey) {
+  const row = lookupReferee(pubkey);
+  return !!(row && row.status === "active");
+}
+
+function cmpUtf16(a, b) {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 export function canonicalize(v) {
@@ -89,14 +102,21 @@ function isNonnegInt(v) {
 export async function verifyReceipt(r, refereePub = null) {
   const errors = [], partial = [];
   let tier = null;
+  let trustedRef = false;
+  let refereeEntry = null;
   try {
-    if (r.schema !== SCHEMA) return { status: "FAIL", trust_tier: null, errors: ["schema"], partial: [] };
+    if (r.schema !== SCHEMA) return { status: "FAIL", trust_tier: null, errors: ["schema"], partial: [], referee_trust: "unknown" };
     const msg = enc.encode(canonicalize(without(r, "signatures")));
     const sigs = r.signatures || {}, ref = r.referee;
     if (!refereePub) partial.push("referee_key_not_pinned");
     else if (refereePub.toLowerCase() !== ref.pubkey.toLowerCase()) errors.push("referee_key_mismatch");
     const rs = sigs.referee;
     if (!rs || rs.key_id !== (await kid(ref.pubkey)) || !(await edVerify(ref.pubkey, rs.sig, msg))) errors.push("bad_referee_signature");
+
+    refereeEntry = lookupReferee(ref.pubkey);
+    if (refereeEntry && refereeEntry.status === "active") trustedRef = true;
+    else if (refereeEntry && refereeEntry.status === "revoked") partial.push(`referee_revoked:${refereeEntry.id}`);
+    else partial.push("referee_not_on_allowlist");
 
     let players = r.players;
     if (!Array.isArray(players) || !players.length) {
@@ -124,13 +144,21 @@ export async function verifyReceipt(r, refereePub = null) {
     }
 
     const refKind = String(ref.key_kind || "");
-    if (LOCAL_REFEREE_PREFIXES.some((p) => refKind.startsWith(p))) partial.push("referee_local_self_attested");
+    if (LOCAL_REFEREE_PREFIXES.some((p) => refKind.startsWith(p))) {
+      partial.push("referee_local_self_attested");
+      trustedRef = false;
+    }
     if (UNVERIFIED_KIND_CLAIMS.has(refKind)) partial.push(`referee_key_kind_claim_unverified:${refKind}`);
     for (const p of players) {
       if (ROLES.has(p.role) && String(p.pubkey || "").toLowerCase() === String(ref.pubkey || "").toLowerCase()) {
         partial.push("referee_same_as_player");
+        trustedRef = false;
         break;
       }
+    }
+    if (refereePub != null && !isTrustedActive(refereePub)) {
+      trustedRef = false;
+      if (!partial.includes("referee_pin_not_allowlisted")) partial.push("referee_pin_not_allowlisted");
     }
 
     for (const p of players) {
@@ -163,7 +191,17 @@ export async function verifyReceipt(r, refereePub = null) {
   } catch (e) {
     errors.push(`malformed:${e.name}`);
     tier = null;
+    trustedRef = false;
   }
-  const status = errors.length ? "FAIL" : partial.length ? "PARTIAL" : "VERIFIED";
-  return { status, trust_tier: tier, errors, partial };
+  let status;
+  if (errors.length) status = "FAIL";
+  else if (!trustedRef) status = SELF_ATTESTED;
+  else if (partial.length) status = "PARTIAL";
+  else status = "VERIFIED";
+  const out = {
+    status, trust_tier: tier, errors, partial,
+    referee_trust: trustedRef ? "active" : (refereeEntry && refereeEntry.status === "revoked" ? "revoked" : "untrusted"),
+  };
+  if (refereeEntry) out.referee_id = refereeEntry.id;
+  return out;
 }
