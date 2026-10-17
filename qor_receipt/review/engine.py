@@ -576,9 +576,10 @@ def _result_from_reread(final: dict | None, claimed: dict) -> dict[str, Any]:
     f = (final or {}).get("final")
     lr = (final or {}).get("last_read")
     src = f or lr
+    q_last = src.get("quarter") if src.get("quarter") is not None else claimed.get("quarter")
     res = {"home_score": src["home"], "away_score": src["away"], "quarter": max(4, int(src.get("quarter") or 4)) if f else
-           int(src.get("quarter") or claimed.get("quarter") or 0), "final_t_ms": int(src["t_ms"]),
-           "winner": "home" if src["home"] > src["away"] else "away"}
+           (int(q_last) if q_last is not None and int(q_last) >= 1 else None), "final_t_ms": int(src["t_ms"]),
+           "winner": R.winner_for(src["home"], src["away"])}
     if f and f.get("basis") == "end_menu":
         res.update(method="end_menu_read", final_basis="end_menu", final_confirmed=f.get("final_confirmed") is not False)
     elif f:

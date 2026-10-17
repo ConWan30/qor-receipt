@@ -2,18 +2,21 @@
 # The signing key is NOT in the image: it comes from the QORTIME_REFEREE_SEED service variable at runtime.
 FROM python:3.12-slim
 # Must equal schema/contracts/compat.json referee_image.qorcap_sidecar_sha (tests/test_contracts.py checks).
-ARG QORCAP_SHA=739efbf3cc71cfce6a828c4c3b5a8eb8fd8433b5
+ARG QORCAP_SHA=67853bfc78beaf3b46297ef501436b7670fb65c5
 RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg curl ca-certificates && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY pyproject.toml README.md LICENSE ./
 COPY qor_receipt ./qor_receipt
 RUN pip install --no-cache-dir ".[referee,vision]"
 # Pinned QorCap sidecar = the exact scorebug + end-of-game-menu readers QorCap ships (fail-closed if missing),
-# including the Monday Night (madden27_monday_night) scorebug pack that only QorCap carries.
+# including the Monday, Sunday and Thursday Night (madden27_{monday,sunday,thursday}_night) packs only QorCap carries.
 RUN curl -fsSL "https://github.com/ConWan30/qorcap/archive/${QORCAP_SHA}.tar.gz" | tar -xz -C /opt \
  && mv "/opt/qorcap-${QORCAP_SHA}/sidecar" /opt/qorcap-sidecar && rm -rf "/opt/qorcap-${QORCAP_SHA}" \
  && test -f /opt/qorcap-sidecar/qorcap_reader.py && test -f /opt/qorcap-sidecar/qorcap_mnp.py \
- && test -f /opt/qorcap-sidecar/packs/madden27_monday_night_v1.npz && test -f /opt/qorcap-sidecar/packs/madden27_end_menu_v2.npz
+ && test -f /opt/qorcap-sidecar/packs/madden27_monday_night_v1.npz \
+ && test -f /opt/qorcap-sidecar/qorcap_snp.py && test -f /opt/qorcap-sidecar/packs/madden27_sunday_night_v1.npz \
+ && test -f /opt/qorcap-sidecar/qorcap_tnp.py && test -f /opt/qorcap-sidecar/packs/madden27_thursday_night_v1.npz \
+ && test -f /opt/qorcap-sidecar/packs/madden27_end_menu_v2.npz
 ENV QORCAP_SIDECAR=/opt/qorcap-sidecar \
     QORTIME_REFEREE_WORKDIR=/tmp/qortime-referee \
     PYTHONUNBUFFERED=1

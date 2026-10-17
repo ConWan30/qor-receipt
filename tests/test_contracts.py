@@ -125,6 +125,19 @@ def test_referee_image_pins_sidecar_with_every_scorebug_profile():
     assert m and m[1] == img["qorcap_sidecar_sha"]
     assert set(img["scorebug_profiles"]) == set(COMPAT["scorebug_profiles"])
     assert "madden27_monday_night_v1.npz" in df
+    assert "qorcap_snp.py" in df and "madden27_sunday_night_v1.npz" in df
+    assert "qorcap_tnp.py" in df and "madden27_thursday_night_v1.npz" in df
+
+
+def test_sidecar_profiles_lists_primetime_profiles(tmp_path):
+    from qor_receipt.review import media as M
+    (tmp_path / "packs").mkdir()
+    assert M.sidecar_profiles(str(tmp_path)) == ["madden27_standard"]
+    for f in ["qorcap_mnp.py", "packs/madden27_monday_night_v1.npz", "qorcap_snp.py", "packs/madden27_sunday_night_v1.npz",
+              "qorcap_tnp.py", "packs/madden27_thursday_night_v1.npz"]:
+        (tmp_path / f).write_bytes(b"")
+    assert M.sidecar_profiles(str(tmp_path)) == ["madden27_standard", "madden27_monday_night", "madden27_sunday_night",
+                                                 "madden27_thursday_night"]
 
 
 def test_hardening_contracts_match_code():
@@ -139,3 +152,48 @@ def test_hardening_contracts_match_code():
     sa = COMPAT["submit_auth"]
     assert sa["request_type"] == A.SUBMIT_TYPE and sa["pow_prefix"] == A.POW_PREFIX and sa["header"].lower() == A.HEADER
     assert sa["min_client"] in A.UPGRADE_MSG
+
+
+# ---- 2026-10-17: result winner "tie"/"unknown" and the real quarter on unconfirmed reads (Py/JS parity)
+U, A = "last_scorebug_read_unconfirmed", "agreed_scorebug_final"
+RESULT_CASES = [
+    ({"home_score": 21, "away_score": 17, "quarter": 4, "winner": "home", "method": A}, []),
+    ({"home_score": 17, "away_score": 21, "quarter": 5, "winner": "away", "method": "end_menu_read"}, []),
+    ({"home_score": 24, "away_score": 24, "quarter": 5, "winner": "tie", "method": "end_menu_read"}, []),
+    ({"home_score": 24, "away_score": 24, "quarter": 4, "winner": "away", "method": A}, []),          # legacy tie
+    ({"home_score": 24, "away_score": 24, "quarter": 4, "winner": "home", "method": A}, ["winner_inconsistent"]),
+    ({"home_score": 21, "away_score": 17, "quarter": 4, "winner": "tie", "method": A}, ["winner_inconsistent"]),
+    ({"home_score": 7, "away_score": 7, "quarter": 1, "winner": "tie", "method": U}, []),              # real Q1 kept
+    ({"home_score": 7, "away_score": 7, "quarter": 1, "winner": "tie", "method": A}, ["quarter_not_final"]),
+    ({"home_score": None, "away_score": None, "quarter": None, "winner": "unknown", "method": U}, []),  # nothing read
+    ({"home_score": None, "away_score": None, "quarter": None, "winner": "away", "method": U}, ["winner_inconsistent"]),
+    ({"home_score": None, "away_score": None, "quarter": 4, "winner": "unknown", "method": A},
+     ["score_not_nonneg_int"]),
+    ({"home_score": 3, "away_score": 0, "quarter": 0, "winner": "home", "method": U}, ["quarter_invalid"]),
+    ({"home_score": 3, "away_score": None, "quarter": 2, "winner": "unknown", "method": U}, ["score_not_nonneg_int"]),
+]
+
+
+@pytest.mark.parametrize("res,errs", RESULT_CASES)
+def test_result_rules(res, errs):
+    assert R.result_errors(dict(res, final_t_ms=1)) == errs
+
+
+def test_result_rules_js_parity():
+    import shutil
+    import subprocess
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node not installed")
+    cases = json.dumps([dict(r, final_t_ms=1) for r, _ in RESULT_CASES])
+    js = ("import { resultErrors } from './verify/verify.js';"
+          f"console.log(JSON.stringify({cases}.map(resultErrors)));")
+    p = subprocess.run([node, "--input-type=module", "-e", js], capture_output=True, text=True, cwd=ROOT, timeout=60)
+    assert p.returncode == 0, p.stderr
+    assert json.loads(p.stdout) == [e for _, e in RESULT_CASES]
+
+
+def test_schema_allows_tie_unknown_and_null_quarter():
+    res = json.loads((ROOT / "schema" / "receipt.v0.json").read_text())["properties"]["result"]["properties"]
+    assert res["winner"]["enum"] == ["home", "away", "tie", "unknown"]
+    assert res["quarter"] == {"type": ["integer", "null"], "minimum": 1}

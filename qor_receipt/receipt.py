@@ -25,6 +25,40 @@ VERIFIED, PARTIAL, SELF_ATTESTED, FAIL = "VERIFIED", "PARTIAL", "SELF_ATTESTED",
 DUAL, SINGLE = "dual-attested", "single-attested"
 MOTION_MIN_PERMILLE = 300
 RESULT_METHODS = frozenset({"agreed_scorebug_final", "end_menu_read", "last_scorebug_read_unconfirmed"})
+UNCONFIRMED = "last_scorebug_read_unconfirmed"
+
+
+def winner_for(home: int, away: int) -> str:
+    """``result.winner`` for a score: "home", "away" or "tie" (equal scores)."""
+    return "home" if home > away else "away" if away > home else "tie"
+
+
+def result_errors(res: dict) -> list[str]:
+    """Result consistency (receipt.v0, 2026-10-17 rules):
+    * winner must follow the score: home / away / "tie" on equal scores (a legacy "away" on a tie is still accepted,
+      that is what drafts said before ties existed);
+    * a final (agreed_scorebug_final / end_menu_read) has integer scores and quarter >= 4 (5 = OT);
+    * an unconfirmed last read keeps the quarter it showed (>= 1) or null, and may carry null scores with winner
+      "unknown" when nothing was read at all (never an invented 0-0 / Q4 / "away")."""
+    errs: list[str] = []
+    unconfirmed = res.get("method") == UNCONFIRMED
+    h, a, q = res.get("home_score"), res.get("away_score"), res.get("quarter")
+    if unconfirmed and h is None and a is None:
+        if res.get("winner") != "unknown":
+            errs.append("winner_inconsistent")
+    elif not _is_nonneg_int(h) or not _is_nonneg_int(a):
+        errs.append("score_not_nonneg_int")
+    else:
+        w = winner_for(h, a)
+        if res.get("winner") != w and not (w == "tie" and res.get("winner") == "away"):
+            errs.append("winner_inconsistent")
+    q_ok = isinstance(q, int) and not isinstance(q, bool)
+    if unconfirmed:
+        if q is not None and (not q_ok or q < 1):
+            errs.append("quarter_invalid")
+    elif not q_ok or q < 4:
+        errs.append("quarter_not_final")
+    return errs
 ROLES = frozenset({"home", "away"})
 LOCAL_REFEREE_PREFIXES = ("local-self-attested",)
 UNVERIFIED_KIND_CLAIMS = frozenset({"tpm"})
@@ -371,14 +405,7 @@ def verify_receipt(r: dict[str, Any], *, referee_pub: str | None = None,
         if m.get("mode") == "dual" and ag.get("timelines_agree") is not True:
             errors.append("dual_timelines_disagree")
         res = r["result"]
-        if not _is_nonneg_int(res.get("home_score")) or not _is_nonneg_int(res.get("away_score")):
-            errors.append("score_not_nonneg_int")
-        else:
-            winner = "home" if res["home_score"] > res["away_score"] else "away"
-            if res.get("winner") != winner:
-                errors.append("winner_inconsistent")
-        if not isinstance(res.get("quarter"), int) or isinstance(res.get("quarter"), bool) or res["quarter"] < 4:
-            errors.append("quarter_not_final")
+        errors.extend(result_errors(res))
         if res.get("method") not in RESULT_METHODS:
             errors.append("bad_result_method")
         tier = compute_tier(r)
